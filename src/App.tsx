@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import axios from "axios";
 
 function App() {
+  const API_URL = import.meta.env.VITE_API_URL;
   const gameRef = useRef(new Chess());
   const game = gameRef.current;
   const [fen, setFen] = useState(game.fen());
@@ -12,7 +13,9 @@ function App() {
   async function engineMove() {
     setLoading(true);
     try {
-    const { data } = await axios.post("http://localhost:8080/api/move", { fen: game.fen() });
+      const { data } = await axios.post(`${API_URL}/api/move`, {
+        fen: game.fen(),
+      });
       game.load(data.fen);
       setFen(data.fen);
     } finally {
