@@ -60,7 +60,7 @@ function ChessGame() {
           here
         </a>{" "}
         for details. Move a white piece to get started (the first move might
-        take a while as the container has to startup).
+        take a while as the container has to startup). Note there is no threefold repition currently implemented.
       </div>
       <div className="max-w-md pt-2">
         <Chessboard options={{ position: fen, onPieceDrop }} />
