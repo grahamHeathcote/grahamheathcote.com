@@ -1,0 +1,1 @@
+*{box-sizing:border-box;margin:0;padding:0}body{background:#000;overflow:hidden}canvas{width:100vw;height:100vh;display:block}#hud{color:#fff;text-shadow:1px 1px 3px #000c;pointer-events:none;z-index:10;font:700 14px/1.6 monospace;position:fixed;top:16px;left:16px}#hud-speed{letter-spacing:1px;font-size:22px}#hud-controls{opacity:.7;margin-top:4px;font-size:12px}
