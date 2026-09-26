@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{--deck:#cccac2;--ink:#3b4a4f;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--deck:#1f292e;--ink:#a9c4ca}}
+:root[data-theme="dark"]{--deck:#1f292e;--ink:#a9c4ca}
+html,body{height:100%;margin:0}
+body{background:var(--deck);color:var(--ink);overflow:hidden;font:500 15px/1.4 Figtree,"Segoe UI",system-ui,sans-serif}
+main{position:relative;height:100%}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#o{touch-action:none;outline:none}
+#o:focus-visible{box-shadow:inset 0 0 0 3px var(--ink)}
+#hint{position:fixed;inset:calc(env(safe-area-inset-top,0px) + 22px) 0 auto;margin:0;text-align:center;pointer-events:none;transition:opacity 1s,color .3s}
+.time{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);transform:translateX(-50%);display:flex;align-items:center;gap:4px}
+.time button{width:36px;height:36px;padding:0;border:0;border-radius:50%;background:none;color:inherit;cursor:pointer;display:grid;place-items:center}
+.time :focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+input{-webkit-appearance:none;appearance:none;width:min(260px,50vw);height:8px;margin:0 6px;border-radius:4px;background:linear-gradient(90deg,#8fd6e4,#f4a261 50%,#23315a);cursor:pointer}
+input::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid #3b4a4f;box-shadow:0 1px 4px #0005}
+input::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid #3b4a4f;box-shadow:0 1px 4px #0005}
+</style>
+</head>
+<body>
+<main><canvas id="c"></canvas><canvas id="o" tabindex="0" role="img" aria-label="Overhead view of a pool with floating toys: a lounge chair, a donut ring, two noodles and a beach ball. Drag a toy to move it. With a keyboard, press Space to pick a toy and the arrow keys to push it."></canvas></main>
+<p id="hint">Drag the toys around the pool.</p>
+<div class="time">
+ <button id="toDay" aria-label="Go to midday"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10" cy="10" r="3.6"/><path d="M10 1.8v2M10 16.2v2M1.8 10h2M16.2 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M4.2 15.8l1.4-1.4M14.4 5.6l1.4-1.4"/></svg></button>
+ <input id="t" type="range" min="0" max="1" step="0.001" value="0" aria-label="Time of day">
+ <button id="toNight" aria-label="Go to night"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path d="M16.4 12.4A7 7 0 1 1 7.6 3.6a5.6 5.6 0 0 0 8.8 8.8z"/></svg></button>
+</div>
+<script>
+const $=id=>document.getElementById(id),c=$('c'),o=$('o'),hint=$('hint'),T=$('t'),gl=c.getContext('webgl'),g2=o.getContext('2d'),
+ sc=document.createElement('canvas'),sx=sc.getContext('2d'),still=matchMedia('(prefers-reduced-motion: reduce)'),tol=matchMedia('(pointer:coarse)').matches?4:1.5;
+if(!gl)hint.textContent='WebGL is turned off in this browser, so the pool can\u2019t be drawn.';
+
+// ---------- water + pool shader ----------
+const FS=`precision highp float;
+uniform sampler2D S,Q;uniform vec4 P;uniform float T,D,N,V,K;
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5);}
+float caus(vec2 p,float t){
+ for(int i=0;i<3;i++)p+=.45*vec2(sin(p.y*1.3+t),cos(p.x*1.1-t*.9));
+ return pow(max(0.,1.-abs(sin(p.x*2.)+sin(p.y*2.))*.7),6.);}
+vec3 floorC(vec2 f){
+ vec2 L=mix(P.zw,P.wz,V),a=mix(f,f.yx,V);
+ float ts=L.y/40.,lw=L.y/4.,s=lw*.05;
+ vec2 g=abs(fract(f/ts)-.5);
+ vec3 c=mix(vec3(.55,.84,.88),vec3(.63,.89,.92),h(floor(f/ts)));
+ float lc=abs(mod(a.y,lw)-lw*.5),e=min(a.x,L.x-a.x),m=L.x*.07;
+ c=mix(c,vec3(.09,.25,.40),max(step(lc,s)*step(m,e),step(lc,lw*.2)*step(abs(e-m),s)));
+ return mix(c,vec3(.86,.95,.95),smoothstep(.43,.47,max(g.x,g.y))*.7);}
+void main(){
+ vec2 p=gl_FragCoord.xy,lp=p-P.xy,dq=max(-lp,lp-P.zw);
+ float S0=min(P.z,P.w),cw=max(12.*D,S0*.035),o=max(dq.x,dq.y),sl=1.+K*1.2;
+ vec3 deck=mix(vec3(.80,.79,.76),vec3(.12,.16,.18),N),cop=mix(vec3(.95,.94,.91),vec3(.25,.30,.32),N),col;
+ if(o>0.){
+  if(o<cw){
+   float al=dq.x>dq.y?lp.y:lp.x,j=abs(fract(al/(cw*2.4)+.5)-.5)*cw*2.4;
+   col=cop*mix(.86,1.,smoothstep(0.,.4,o/cw))*(1.-.12*(1.-smoothstep(.5*D,1.5*D,j)));
+   col*=1.-.1*(1.-smoothstep(.5*D,1.5*D,cw-o));
+  }else{
+   vec2 q=lp+cw,e=abs(fract(q/(S0*.2)+.5)-.5)*S0*.2;
+   col=deck*(1.-.12*(1.-smoothstep(.5*D,1.5*D,min(e.x,e.y))));
+   vec2 sq=lp+vec2(-1,1)*cw*.45*sl,sd=max(-sq-cw,sq-P.zw-cw);
+   col*=1.-.22*(1.-smoothstep(-D,D,max(sd.x,sd.y)))*(1.-N*.6);
+  }
+  col*=.97+.05*h(floor(p/(2.*D)));
+ }else{
+  vec4 w=texture2D(S,lp/P.zw);
+  vec2 g=(w.xy-.5)*2.,L=mix(P.zw,P.wz,V),f=lp+g*S0*.03;
+  float lap=(w.z-.5)*2.,dp=mix(.25,1.,smoothstep(.3,.85,mix(f.x,f.y,V)/L.x)),sd=S0*.035*(.6+.4*dp)*sl;
+  float sh=smoothstep(-3.*D,3.*D,max(sd-f.x,f.y-(P.w-sd)));
+  vec2 su=(f+vec2(-1,1)*S0*.05*dp*sl)/P.zw,e=vec2(max(P.z,P.w)/250.)/P.zw;
+  float ts=(2.*texture2D(Q,su).a+texture2D(Q,su+vec2(e.x,0)).a+texture2D(Q,su-vec2(e.x,0)).a+texture2D(Q,su+vec2(0,e.y)).a+texture2D(Q,su-vec2(0,e.y)).a)/6.;
+  sh=max(sh,ts*.85);
+  vec3 fc=floorC(f);
+  vec3 day=(fc*(1.-.32*sh)+(caus(f/(S0*.06),T)*.24+lap*.7)*(1.-sh))*mix(vec3(.95,1.,1.),vec3(.52,.78,.9),dp);
+  vec2 a=mix(f,f.yx,V);float lt=.18;
+  for(int i=1;i<3;i++)lt+=1.3*exp(-length(a-vec2(L.x*float(i)/3.,0.))/(S0*.3));
+  vec3 night=fc*lt*vec3(.55,.95,1.05)*mix(1.,.6,dp)+lap*.5*vec3(.6,1.,1.);
+  col=mix(day,night,N);
+  vec3 n=normalize(vec3(-g*2.,1.));
+  col+=pow(max(dot(n,normalize(vec3(-.25,.3,1.))),0.),400.)*mix(1.2,.6,N);
+  col*=.75+.25*smoothstep(0.,4.*D,min(min(lp.x,lp.y),min(P.z-lp.x,P.w-lp.y)));
+ }
+ gl_FragColor=vec4(col*mix(vec3(1),vec3(1.06,.88,.76),K*(o>0.?1.:.5)),1);}`;
+
+const sh=(t,s)=>{const x=gl.createShader(t);gl.shaderSource(x,s);gl.compileShader(x);return x},pr=gl.createProgram();
+gl.attachShader(pr,sh(gl.VERTEX_SHADER,'attribute vec2 a;void main(){gl_Position=vec4(a,0,1);}'));
+gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,FS));
+gl.bindAttribLocation(pr,0,'a');gl.linkProgram(pr);gl.useProgram(pr);
+gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+for(const u of[0,1]){gl.activeTexture(gl.TEXTURE0+u);gl.bindTexture(gl.TEXTURE_2D,gl.createTexture());
+ for(const[k,v]of[[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]])gl.texParameteri(gl.TEXTURE_2D,k,v)}
+const U={};for(const k of'PTDNVKQ')U[k]=gl.getUniformLocation(pr,k);
+gl.uniform1i(U.Q,1);
+
+// ---------- helpers ----------
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x)),ss=(a,b,x)=>(x=clamp((x-a)/(b-a),0,1),x*x*(3-2*x)),
+ seg=(x,y,ax,ay,bx,by)=>{const dx=bx-ax,dy=by-ay,k=clamp(((x-ax)*dx+(y-ay)*dy)/(dx*dx+dy*dy),0,1);return Math.hypot(x-ax-dx*k,y-ay-dy*k)},
+ tube=(d,r)=>1-ss(r-2.5,r+2,d),
+ circ=(g,x,y,r,f)=>{g.beginPath();g.arc(x,y,r,0,7);g.fillStyle=f;g.fill()},
+ grd=(gr,...s)=>{for(let i=0;i<s.length;i+=2)gr.addColorStop(s[i],s[i+1]);return gr};
+
+// ---------- toys (units = water grid cells; cs = collision circles; fp = how deep each spot sits in the water) ----------
+const TUBES=[[-19,-16,-19,16,4.6],[-19,-16,17,-16,4.2],[-19,16,17,16,4.2],[19,-11,19,11,2.8]],SPR=['#fff','#ffd23f','#3ec9c0','#6b5bd6','#ff5a4f'];
+const ball={cs:[[0,0,8]],R:9,ρ:.1,d:.5,fp:(x,y)=>1-ss(2,6,Math.hypot(x,y)),draw(g,s,[lx,ly]){
+ ['#e63e36','#fff','#2d6fd8','#fff','#f6c22e','#fff'].forEach((f,i)=>{g.beginPath();g.moveTo(0,0);g.arc(0,0,8,i*Math.PI/3,(i+1)*Math.PI/3);g.fillStyle=s?'#000':f;g.fill()});
+ if(s)return;circ(g,0,0,1.8,'#fff');
+ circ(g,0,0,8,grd(g.createRadialGradient(lx*3.5,ly*3.5,0,0,0,8),0,'#fff9',.35,'#fff0',.7,'#00142800',1,'#00142866'));
+}};
+const ring={cs:[[0,0,16]],R:17,ρ:.22,d:.7,fp:(x,y)=>tube(Math.abs(Math.hypot(x,y)-11.25),4.75),draw(g,s,[lx,ly]){
+ const body=()=>{g.beginPath();g.arc(0,0,16,0,7);g.moveTo(6.5,0);g.arc(0,0,6.5,0,7)};
+ body();g.fillStyle=s?'#000':'#e5ab6c';g.fill('evenodd');if(s)return;
+ g.beginPath();
+ for(let i=0;i<=129;i++){const k=i>64,a=(k?129-i:i)/64*Math.PI*2,r=k?8.4+.5*Math.sin(9*a):13.6+.9*Math.sin(7*a+1)+.5*Math.sin(13*a);g.lineTo(r*Math.cos(a),r*Math.sin(a))}
+ g.fillStyle='#ff86b9';g.fill();
+ g.lineCap='round';g.lineWidth=.6;
+ for(let i=0;i<26;i++){const a=i*2.4,r=9.8+i*7%4*.7,x=r*Math.cos(a),y=r*Math.sin(a),cx=.8*Math.cos(i*1.9),cy=.8*Math.sin(i*1.9);
+  g.strokeStyle=SPR[i%5];g.beginPath();g.moveTo(x-cx,y-cy);g.lineTo(x+cx,y+cy);g.stroke()}
+ body();g.fillStyle=grd(g.createRadialGradient(0,0,6.5,0,0,16),0,'#0005',.28,'#0000',.72,'#0000',1,'#0004');g.fill('evenodd');
+ body();g.fillStyle=grd(g.createLinearGradient(lx*16,ly*16,-lx*16,-ly*16),0,'#fff5',.5,'#fff0',1,'#0003');g.fill('evenodd');
+}};
+const noodle=col=>({cs:[-26,-17.3,-8.7,0,8.7,17.3,26].map(x=>[x,0,3.6]),R:31,ρ:.3,d:.6,fp:(x,y)=>tube(seg(x,y,-26.4,0,26.4,0),3.6),draw(g,s,[,ly]){
+ const body=()=>{g.beginPath();g.roundRect(-30,-3.6,60,7.2,2.4)},k=ly<0?-3.6:3.6;
+ body();g.fillStyle=s?'#000':col;g.fill();if(s)return;
+ body();g.fillStyle=grd(g.createLinearGradient(0,-k,0,k),0,'#0000004d',.5,'#fff0',.8,'#fff6',1,'#fff2');g.fill();
+ g.strokeStyle='#0000001f';g.lineWidth=.35;for(const y of[-1.2,1.2]){g.beginPath();g.moveTo(-29,y);g.lineTo(29,y);g.stroke()}
+}});
+const chair={cs:[[-11,-9,11.5],[-11,9,11.5],[10,-9,11.5],[10,9,11.5]],R:30,ρ:.4,d:1,
+ fp:(x,y)=>{let v=x>-17&&x<20&&Math.abs(y)<12.5?.35:0;for(const t of TUBES)v=Math.max(v,tube(seg(x,y,...t),t[4]));return v},
+ draw(g,s,[lx,ly]){
+ const pass=(w,k,f)=>{g.strokeStyle=f;for(const[a,b,c,d,r]of TUBES){g.lineWidth=2*r*w;g.beginPath();g.moveTo(a+lx*k,b+ly*k);g.lineTo(c+lx*k,d+ly*k);g.stroke()}};
+ g.lineCap='round';g.beginPath();g.roundRect(-17,-12.5,37,25,5);g.fillStyle=s?'#0008':'#fbf4e2';g.fill();
+ if(s)return pass(1,0,'#000');
+ g.save();g.clip();g.fillStyle='#ffc43273';for(let x=-13;x<20;x+=5.5)g.fillRect(x,-13,2.4,26);
+ g.fillStyle=grd(g.createRadialGradient(lx*6,ly*6,2,0,0,22),0,'#fff3',1,'#0002');g.fillRect(-18,-14,40,28);g.restore();
+ pass(1,0,'#d8961c');pass(.82,.7,'#ffc83d');pass(.3,1.9,'#ffffff80');
+ for(const y of[-16,16])circ(g,13,y,1.9,'#6a46004d');
+}};
+const toys=[[chair,.7,.36,.4],[ring,.27,.64,0],[noodle('#ff5fa2'),.36,.27,-.25],[noodle('#b3df45'),.83,.77,1.1],[ball,.53,.72,0]].map(([k,u,v,a])=>{
+ let m=0,I=0;for(const[x,y,r]of k.cs){const q=r*r*k.ρ;m+=q;I+=q*(r*r/2+x*x+y*y)}
+ return{...k,u,v,a,x:0,y:0,vx:0,vy:0,w:0,m,I};
+});
+
+// ---------- water grid ----------
+let P,cell,gw=0,gh=0,A,V,px;
+function resize(){
+ const r=c.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,2),ow=gw,oh=gh;
+ o.width=c.width=r.width*d|0;o.height=c.height=r.height*d|0;gl.viewport(0,0,c.width,c.height);
+ const m=Math.max(70*d,Math.min(c.width,c.height)*.09);
+ P=[m,m,c.width-2*m,c.height-2*m];cell=Math.max(P[2],P[3])/300;
+ gw=sc.width=Math.round(P[2]/cell);gh=sc.height=Math.round(P[3]/cell);
+ A=new Float32Array(gw*gh);V=new Float32Array(gw*gh);px=new Uint8ClampedArray(gw*gh*4);
+ for(const t of toys){t.x=ow?t.x*gw/ow:t.u*gw;t.y=oh?t.y*gh/oh:t.v*gh;t.pi=null}
+ gl.uniform4fv(U.P,P);gl.uniform1f(U.D,d);gl.uniform1f(U.V,P[3]>P[2]?1:0);
+}
+// Height A, vertical velocity V. The second term is viscosity, so fine chop dies out faster than long swells.
+function step(){
+ for(let y=1;y<gh-1;y++)for(let x=1,i=y*gw+1;x<gw-1;x++,i++)
+  V[i]=(V[i]+.4*(A[i-1]+A[i+1]+A[i-gw]+A[i+gw]-4*A[i])+.025*(V[i-1]+V[i+1]+V[i-gw]+V[i+gw]-4*V[i]))*.994;
+ for(let i=0;i<A.length;i++)A[i]+=V[i];
+}
+// Each toy pushes water by the change in its footprint: water rises where it arrives and falls where it left.
+function stamp(t){
+ if(t.pi&&Math.abs(t.x-t.px)+Math.abs(t.y-t.py)+Math.abs(t.a-t.pa)*t.R<1e-3)return;
+ t.px=t.x;t.py=t.y;t.pa=t.a;
+ const co=Math.cos(t.a),si=Math.sin(t.a),ni=[],nv=[];
+ for(let y=Math.max(1,t.y-t.R|0);y<=Math.min(gh-2,t.y+t.R+1|0);y++)for(let x=Math.max(1,t.x-t.R|0);x<=Math.min(gw-2,t.x+t.R+1|0);x++){
+  const dx=x-t.x,dy=y-t.y,v=t.fp(dx*co+dy*si,dy*co-dx*si);if(v>.01){ni.push(y*gw+x);nv.push(v*t.d*.65)}}
+ if(t.pi){t.pi.forEach((i,k)=>A[i]-=t.pv[k]);ni.forEach((i,k)=>A[i]+=nv[k])}
+ t.pi=ni;t.pv=nv;
+}
+
+// ---------- toy physics ----------
+const DT=1/120,LD=Math.exp(-1.3*DT),AD=Math.exp(-2.4*DT);
+const grad=(x,y)=>{const i=clamp(Math.round(y),1,gh-2)*gw+clamp(Math.round(x),1,gw-2);return[(A[i+1]-A[i-1])/2,(A[i+gw]-A[i-gw])/2]};
+function hitc(a,b,px,py,nx,ny,pen){
+ const ia=1/a.m,ib=b?1/b.m:0,s=pen/(ia+ib)*.8,rax=px-a.x,ray=py-a.y,rbx=b?px-b.x:0,rby=b?py-b.y:0;
+ a.x+=nx*s*ia;a.y+=ny*s*ia;if(b){b.x-=nx*s*ib;b.y-=ny*s*ib}
+ const vn=(a.vx-a.w*ray-(b?b.vx-b.w*rby:0))*nx+(a.vy+a.w*rax-(b?b.vy+b.w*rbx:0))*ny;
+ if(vn>=0)return;
+ const ca=rax*ny-ray*nx,cb=rbx*ny-rby*nx,j=-1.35*vn/(ia+ib+ca*ca/a.I+(b?cb*cb/b.I:0));
+ a.vx+=j*nx*ia;a.vy+=j*ny*ia;a.w+=ca*j/a.I;
+ if(b){b.vx-=j*nx*ib;b.vy-=j*ny*ib;b.w-=cb*j/b.I}
+}
+const world=t=>{const co=Math.cos(t.a),si=Math.sin(t.a);return t.cs.map(([x,y,r])=>[t.x+x*co-y*si,t.y+x*si+y*co,r])};
+let grab=null,selT=null;
+function phys(){
+ for(const t of toys){
+  const co=Math.cos(t.a),si=Math.sin(t.a);let fx=0,fy=0,tq=0;
+  const push=(rx,ry,Fx,Fy)=>{fx+=Fx;fy+=Fy;tq+=rx*Fy-ry*Fx};
+  for(const[x,y,r]of t.cs){const rx=x*co-y*si,ry=x*si+y*co,[gx,gy]=grad(t.x+rx,t.y+ry),w=-r*r*t.ρ*160;push(rx,ry,gx*w,gy*w)}
+  if(grab&&grab.t===t){const rx=grab.lx*co-grab.ly*si,ry=grab.lx*si+grab.ly*co;
+   push(rx,ry,t.m*(420*(grab.x-t.x-rx)-32*(t.vx-t.w*ry)),t.m*(420*(grab.y-t.y-ry)-32*(t.vy+t.w*rx)))}
+  t.vx=(t.vx+fx/t.m*DT)*LD;t.vy=(t.vy+fy/t.m*DT)*LD;t.w=(t.w+tq/t.I*DT)*AD;
+  const sp=Math.hypot(t.vx,t.vy);if(sp>250){t.vx*=250/sp;t.vy*=250/sp}
+  t.x+=t.vx*DT;t.y+=t.vy*DT;t.a+=t.w*DT;
+ }
+ const W=toys.map(world);
+ toys.forEach((t,i)=>{
+  for(const[x,y,r]of W[i]){
+   if(x-r<1)hitc(t,null,1,y,1,0,1-x+r);if(x+r>gw-2)hitc(t,null,gw-2,y,-1,0,x+r-gw+2);
+   if(y-r<1)hitc(t,null,x,1,0,1,1-y+r);if(y+r>gh-2)hitc(t,null,x,gh-2,0,-1,y+r-gh+2);
+  }
+  for(let j=0;j<i;j++)for(const[ax,ay,ar]of W[i])for(const[bx,by,br]of W[j]){
+   const dx=ax-bx,dy=ay-by,d=Math.hypot(dx,dy);if(d<ar+br&&d>1e-4)hitc(t,toys[j],bx+dx/d*br,by+dy/d*br,dx/d,dy/d,ar+br-d)}
+ });
+}
+
+// ---------- input ----------
+const toGrid=e=>{const r=o.getBoundingClientRect(),d=o.width/r.width;return[((e.clientX-r.left)*d-P[0])/cell,(o.height-(e.clientY-r.top)*d-P[1])/cell]};
+const hit=p=>{for(let k=toys.length;k--;){const t=toys[k],co=Math.cos(t.a),si=Math.sin(t.a),dx=p[0]-t.x,dy=p[1]-t.y,lx=dx*co+dy*si,ly=dy*co-dx*si;
+ if(t.cs.some(([x,y,r])=>Math.hypot(lx-x,ly-y)<r+tol))return[t,lx,ly]}};
+o.addEventListener('pointerdown',e=>{const p=toGrid(e),h=hit(p);if(!h)return;
+ grab={t:h[0],lx:h[1],ly:h[2],x:p[0],y:p[1],id:e.pointerId};toys.push(toys.splice(toys.indexOf(h[0]),1)[0]);
+ o.setPointerCapture(e.pointerId);o.style.cursor='grabbing';hint.style.opacity=0});
+o.addEventListener('pointermove',e=>{const p=toGrid(e);if(grab){if(e.pointerId===grab.id){grab.x=p[0];grab.y=p[1]}}else o.style.cursor=hit(p)?'grab':''});
+for(const ev of['pointerup','pointercancel'])o.addEventListener(ev,()=>{grab=null;o.style.cursor=''});
+o.addEventListener('keydown',e=>{
+ const d={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,1],ArrowDown:[0,-1]}[e.key];
+ if(e.key===' '||e.key==='Enter')selT=toys[(toys.indexOf(selT)+1)%toys.length];
+ else if(d&&selT){selT.vx+=d[0]*30;selT.vy+=d[1]*30}else return;
+ e.preventDefault();hint.style.opacity=0;
+});
+o.addEventListener('blur',()=>selT=null);
+
+// ---------- time of day ----------
+let N=0,K=0,anim=null;
+function setTime(v){
+ T.value=v;N=ss(.4,.95,v);K=Math.exp(-(((v-.5)/.17)**2));
+ const r=document.documentElement.style,dk=[204,201,194].map((x,i)=>Math.round((x+([31,41,46][i]-x)*N)*(1+([1.06,.88,.76][i]-1)*K)));
+ r.setProperty('--deck',`rgb(${dk})`);r.setProperty('--ink',N>.45?'#a9c4ca':'#3b4a4f');
+ o.style.filter=`brightness(${1-.55*N-.1*K}) saturate(${1-.2*N}) sepia(${.25*K})`;
+ T.setAttribute('aria-valuetext',v<.3?'Midday':v<.75?'Sunset':'Night');
+}
+const go=to=>still.matches?setTime(to):anim=[+T.value,to,performance.now()];
+$('toDay').onclick=()=>go(0);$('toNight').onclick=()=>go(1);
+T.oninput=()=>{anim=null;setTime(+T.value)};
+const th=document.documentElement.dataset.theme;
+setTime(th==='dark'||(th!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches)?1:0);
+
+// ---------- loop ----------
+let acc=0,prev=performance.now();
+function frame(now){
+ acc=Math.min(acc+now-prev,50);prev=now;
+ if(anim){const k=Math.min((now-anim[2])/1500,1);setTime(anim[0]+(anim[1]-anim[0])*k*k*(3-2*k));if(k===1)anim=null}
+ while(acc>=DT*1000){phys();toys.forEach(stamp);step();acc-=DT*1000}
+ for(let y=0,i=0;y<gh;y++)for(let x=0;x<gw;x++,i++){
+  const l=A[x?i-1:i],r=A[x<gw-1?i+1:i],d=A[y?i-gw:i],u=A[y<gh-1?i+gw:i];
+  px[i*4]=128+(l-r)*400;px[i*4+1]=128+(d-u)*400;px[i*4+2]=128+(l+r+d+u-4*A[i])*400;
+ }
+ gl.activeTexture(gl.TEXTURE0);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gw,gh,0,gl.RGBA,gl.UNSIGNED_BYTE,px);
+ sx.clearRect(0,0,gw,gh);
+ g2.setTransform(1,0,0,1,0,0);g2.clearRect(0,0,o.width,o.height);g2.setTransform(cell,0,0,-cell,P[0],o.height-P[1]);
+ for(const t of toys){
+  const co=Math.cos(t.a),si=Math.sin(t.a),L=[.707*(si-co),.707*(si+co)],b=1+clamp(A[Math.round(t.y)*gw+Math.round(t.x)]||0,-.4,.4)*.08;
+  for(const[g,s]of[[sx,1],[g2,0]]){g.save();g.translate(t.x,t.y);g.rotate(t.a);g.scale(b,b);t.draw(g,s,L);g.restore()}
+  if(t===selT&&document.activeElement===o){g2.setLineDash([2,1.6]);g2.lineWidth=.7;g2.strokeStyle='#fff';g2.beginPath();g2.arc(t.x,t.y,t.R*.9,0,7);g2.stroke();g2.setLineDash([])}
+ }
+ gl.activeTexture(gl.TEXTURE1);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,sc);
+ gl.uniform1f(U.N,N);gl.uniform1f(U.K,K);gl.uniform1f(U.T,still.matches?0:now/2500);
+ gl.drawArrays(gl.TRIANGLES,0,3);
+ requestAnimationFrame(frame);
+}
+if(gl){addEventListener('resize',resize);resize();requestAnimationFrame(frame)}
+</script>
+</body>
+</html>
