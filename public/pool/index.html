@@ -31,7 +31,7 @@ input::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-<main><canvas id="c" tabindex="0" role="img" aria-label="A 3D swimming pool with floating toys: a lounge chair, a donut ring, two noodles and a beach ball. Drag a toy to move it, or tap the water to splash. With a keyboard, press Space to pick a toy and the arrow keys to push it."></canvas></main>
+<main><canvas id="c" tabindex="0" role="img" aria-label="A 3D swimming pool with floating toys: a lounge chair, a donut ring, two noodles and a beach ball. Drag a toy to move it, or tap the water to splash. Tap the water slide to turn its water on or off. With a keyboard, press Space to pick a toy and the arrow keys to push it."></canvas></main>
 <div id="nojs"><p>This pool only runs in a web browser.<br>The phone's file preview can't play it, so ask whoever sent it for a link.</p></div>
 <p id="hint">Drag the toys around. Tap the water to splash.</p>
 <div class="ctl">
@@ -247,10 +247,11 @@ function phys(){
 
 // ---------- 3D scene ----------
 const R3=new THREE.WebGLRenderer({canvas:cv,antialias:true,powerPreference:'high-performance',stencil:false});R3.setPixelRatio(Math.min(devicePixelRatio||1,2));
+R3.shadowMap.enabled=true;R3.shadowMap.type=THREE.PCFShadowMap;R3.shadowMap.autoUpdate=false;
 const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(40,1,.1,600);scene.fog=new THREE.Fog(0,45,170);
 const wtex=new THREE.DataTexture(new Uint8Array(px.buffer),gw,gh,THREE.RGBAFormat);wtex.magFilter=wtex.minFilter=THREE.LinearFilter;
 const stex=new THREE.CanvasTexture(sc);stex.flipY=false;stex.generateMipmaps=false;stex.magFilter=stex.minFilter=THREE.LinearFilter;
-const U={Qu:{value:3},S:{value:wtex},Q:{value:stex},T:{value:0},N:{value:0},sunDir:{value:new THREE.Vector3(0,1,0)},sunCol:{value:new THREE.Color()},skyZ:{value:new THREE.Color()},skyH:{value:new THREE.Color()}};
+const U={SEG:{value:[0,1,2,3].map(()=>new THREE.Vector2(9,8))},FW:{value:0},FT:{value:0},Qu:{value:3},S:{value:wtex},Q:{value:stex},T:{value:0},N:{value:0},sunDir:{value:new THREE.Vector3(0,1,0)},sunCol:{value:new THREE.Color()},skyZ:{value:new THREE.Color()},skyH:{value:new THREE.Color()}};
 
 // Shared shading for the pool interior. Pool: x ∈ ±PL/2, z ∈ ±PW/2, floor slopes from DA (shallow) to DB (deep) below the deck.
 const POOL=`
@@ -295,7 +296,7 @@ void main(){vU=(uv*vec2(${gw-1}.,${gh-1}.)+.5)/vec2(${gw}.,${gh}.);
  vec4 q=texture2D(Q,vU);
  // right under a toy the water is flattened and pushed down (red = how far, most for the chair), so however
  // steeply a toy tilts, water can't come up through it
- float h=mix(clamp((texture2D(S,vU).r-.502)*${(255/60*HS).toFixed(4)},-.6,.14)*(1.-.8*q.a),-.45,q.r);
+ float h=mix(clamp((texture2D(S,vU).r-.502)*${(255/60*HS).toFixed(4)},-.6,.14)*(1.-.8*q.b*q.a),-.45,q.r);
  vec4 w=modelMatrix*vec4(position.x,position.y+h,position.z,1.);vP=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,
 `varying vec3 vP;varying vec2 vU;
 void main(){
@@ -339,7 +340,8 @@ const dg=new THREE.ShapeGeometry(ds);dg.rotateX(-Math.PI/2);
 const pav=canvasTex(256,256,g=>{g.fillStyle='#b9b4aa';g.fillRect(0,0,256,256);for(let i=0;i<2600;i++){g.fillStyle=`rgba(${Math.random()<.5?'255,255,255':'60,55,50'},${Math.random()*.07})`;g.fillRect(Math.random()*256,Math.random()*256,2,2)}
  g.fillStyle='#a9a398';g.fillRect(0,0,256,2);g.fillRect(0,0,2,256)});
 pav.wrapS=pav.wrapT=THREE.RepeatWrapping;pav.repeat.set(1/.9,1/.9);pav.anisotropy=R3.capabilities.getMaxAnisotropy();
-const deck=mesh(dg,new THREE.MeshLambertMaterial({map:pav}));
+// (Phong with no highlight = same flat matte look, but it shadows each light separately, so moon shadows stay faint)
+const deck=mesh(dg,new THREE.MeshPhongMaterial({map:pav,specular:0,shininess:0}));
 
 // sky dome (also what the water reflects), with stars at night
 const skyDome=mesh(new THREE.SphereGeometry(500,32,16),shade(VS,`varying vec3 vP;
@@ -350,9 +352,13 @@ void main(){vec3 d=normalize(vP-cameraPosition),c=sky(d);c+=N*step(.997,hsh(floo
 water.renderOrder=1;walls.renderOrder=2;coping.renderOrder=3;deck.renderOrder=4;skyDome.renderOrder=5;
 
 const sunL=new THREE.DirectionalLight(0xffffff,1),hemi=new THREE.HemisphereLight(0xffffff,0x777777,.6);
+const fillL=new THREE.DirectionalLight(0xffffff,0);
+sunL.castShadow=true;sunL.shadow.mapSize.set(1024,1024);sunL.shadow.bias=-.0006;sunL.target.position.set(2.3,0,-4.4);
+Object.assign(sunL.shadow.camera,{left:-4.5,right:4.5,top:4.5,bottom:-4.5,near:1,far:60});
 const selRing=mesh(new THREE.RingGeometry(.9,1,48),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.85,depthTest:false}));
 selRing.rotation.x=-Math.PI/2;selRing.visible=false;
-scene.add(skyDome,deck,coping,walls,water,sunL,hemi,selRing);
+deck.receiveShadow=coping.receiveShadow=true;
+scene.add(skyDome,deck,coping,walls,water,sunL,sunL.target,fillL,hemi,selRing);
 // Merge a toy's parts that share a material into one mesh: identical triangles, far fewer draw calls
 // (the donut's 34 sprinkles become 5 draws, the chair's 15 parts become 3).
 function bake(root){
@@ -376,8 +382,91 @@ function bake(root){
 for(const t of toys){t.mesh=bake(t.mk());t.mesh.userData.toy=t;scene.add(t.mesh)}
 const toyMeshes=toys.map(t=>t.mesh);
 
+// ---------- water slide on the far side at the deep end. A sheet of water runs down it and pours off the end,
+// making small waves where it lands. Tap it to turn the water on or off. ----------
+const SLR=.3,slideCurve=new THREE.CatmullRomCurve3([[1.15,2.25,-4.65],[2.3,1.9,-4.8],[3.5,1.3,-4.75],[4.35,.78,-4.4],[4.55,.36,-3.95],[4.55,.15,-3.5]].map(p=>new THREE.Vector3(...p)),false,'centripetal');
+// sweep a cross-section (u sideways, v up) along a curve; uv = (fraction across, metres along)
+function sweep(curve,prof,n,closed){
+ const pos=[],uv=[],idx=[],L0=curve.getLength(),m=prof.length,S=new THREE.Vector3(),Up=new THREE.Vector3();
+ for(let i=0;i<=n;i++){const s=i/n,p=curve.getPointAt(s),T=curve.getTangentAt(s);S.crossVectors(T,Y).normalize();Up.crossVectors(S,T);
+  prof.forEach(([u,v],k)=>{pos.push(p.x+S.x*u+Up.x*v,p.y+S.y*u+Up.y*v,p.z+S.z*u+Up.z*v);uv.push(k/(m-1),s*L0)})}
+ for(let i=0;i<n;i++)for(let k=0;k<(closed?m:m-1);k++){const a=i*m+k,b=i*m+(k+1)%m;idx.push(a,b,a+m,b,b+m,a+m)}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+ g.setIndex(idx);g.computeVertexNormals();return g;
+}
+const arc=(r,a,b,n)=>Array.from({length:n+1},(_,k)=>{const f=a+(b-a)*k/n;return[r*Math.sin(f),SLR-r*Math.cos(f)]}),PM=Math.PI/2+.15,
+ blue=std('#2f6fd6',.22),white=std('#eef1f3',.4),slide=new THREE.Group(),
+ post=(x0,y0,z0,x1,y1,z1,r,mat)=>{const a=new THREE.Vector3(x0,y0,z0),b=new THREE.Vector3(x1,y1,z1),d=b.clone().sub(a),m=mesh(new THREE.CylinderGeometry(r,r,d.length(),12),mat,a.clone().add(b).multiplyScalar(.5));m.quaternion.setFromUnitVectors(Y,d.normalize());return m};
+slide.add(mesh(sweep(slideCurve,[...arc(SLR,-PM,PM,20),...arc(SLR+.035,PM,-PM,20)],90,true),blue));   // the chute
+for(const s of[.3,.55,.78]){const p=slideCurve.getPointAt(s);slide.add(post(p.x,0,p.z,p.x,p.y-.02,p.z,.04,white))}
+const PX=.75,PZ=-4.65,PY=2.22;slide.add(mesh(new THREE.BoxGeometry(.9,.06,.9),blue,new THREE.Vector3(PX,PY,PZ)));   // platform
+for(const a of[-1,1])for(const b of[-1,1])slide.add(post(PX+a*.4,0,PZ+b*.4,PX+a*.4,PY,PZ+b*.4,.035,white));
+for(const b of[-1,1])slide.add(post(PX-.4,PY,PZ+b*.4,PX-.4,PY+.7,PZ+b*.4,.025,white),post(PX+.1,PY,PZ+b*.4,PX+.1,PY+.7,PZ+b*.4,.025,white),post(PX-.4,PY+.7,PZ+b*.4,PX+.1,PY+.7,PZ+b*.4,.025,white));
+for(const b of[-1,1])slide.add(post(PX-1,0,PZ+b*.22,PX-.45,PY+.5,PZ+b*.22,.028,white));   // ladder
+for(let k=1;k<8;k++){const f=k*.3/(PY+.5),x=PX-1+.55*f;slide.add(post(x,k*.3,PZ-.22,x,k*.3,PZ+.22,.02,white))}
+const slideObj=bake(slide);slideObj.traverse(o=>{if(o.isMesh)o.castShadow=true});
+
+// flowing water: bright streaks scrolling at about 3 m/s
+// Water on the slide comes in slugs: SEG[i] = (youngest, oldest) age in seconds of the water released while the
+// slide was switched on; this mesh's point is age AG.x + metres·AG.y. Only draw where water currently is.
+const flowMat=ag=>shade(`varying vec3 vP,vN;varying vec2 vU;void main(){vU=uv;vN=normalize(mat3(modelMatrix)*normal);vec4 w=modelMatrix*vec4(position,1.);vP=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}`,
+`varying vec3 vP,vN;varying vec2 vU;uniform float FT;uniform vec2 AG,SEG[4];
+void main(){
+ float a=AG.x+vU.y*AG.y+.025*sin(vU.x*9.+vU.y*3.),m=0.;   // (a slightly uneven leading edge)
+ for(int i=0;i<4;i++)m=max(m,smoothstep(SEG[i].x-.05,SEG[i].x+.05,a)*(1.-smoothstep(SEG[i].y-.05,SEG[i].y+.05,a)));
+ if(m<.01)discard;
+ float s=vU.y-FT*3.2,st=.5+.5*sin(s*7.+sin(vU.x*19.+s*1.7)*1.6)*sin(s*2.3-vU.x*8.);
+ vec3 n=normalize(vN),v=normalize(vP-cameraPosition),rr=reflect(v,n);float F=pow(1.-abs(dot(n,-v)),3.);
+ vec3 c=mix(vec3(.78,.94,.98)*(skyH*.4+skyZ*.2+sunCol*.55),.5+.5*sunCol,st*.45)+sunCol*pow(max(dot(rr,sunDir),0.),60.)*.7+N*vec3(.05,.12,.14);
+ gl_FragColor=vec4(c,(.32+.3*st+F*.25)*m);}`,{transparent:true,depthWrite:false,uniforms:{...U,AG:{value:new THREE.Vector2(...ag)}}});
+const FLOW_V=3.2,TC=slideCurve.getLength()/FLOW_V;   // water runs down at ~3.2 m/s; TC = seconds from top to the lip
+const sheet=mesh(sweep(slideCurve,arc(SLR-.012,-.8,.8,12),90,false),flowMat([0,1/FLOW_V]));
+// the stream off the end: a flattened jet on a falling arc (2.6 m/s off the lip), landing ~0.7 m out
+const E=slideCurve.getPointAt(1),D=slideCurve.getTangentAt(1).setY(0).normalize(),fall=[],tHit=Math.sqrt((E.y+.03-WY)/4.9);
+for(let i=0;i<=10;i++){const t=i/10*.28;fall.push(new THREE.Vector3(E.x+D.x*2.6*t,E.y+.03-4.9*t*t,E.z+D.z*2.6*t))}
+const fallCurve=new THREE.CatmullRomCurve3(fall),TL=TC+tHit;   // TL = seconds from the top until it lands in the pool
+const stream=mesh(sweep(fallCurve,Array.from({length:14},(_,k)=>{const f=-k/14*Math.PI*2;return[.16*Math.cos(f),.025*Math.sin(f)]}),24,true),flowMat([TC,.28/fallCurve.getLength()]));
+const HIT=new THREE.Vector3(E.x+D.x*2.6*tHit,WY,E.z+D.z*2.6*tHit),[IX,IY]=W2G(HIT.x,HIT.z).map(Math.round);
+// a soft patch of churned water where it lands, riding the waves
+const fg=new THREE.CircleGeometry(.34,32);fg.rotateX(-Math.PI/2);
+const foam=mesh(fg,shade(`uniform sampler2D S;varying vec2 vL;
+void main(){vL=position.xz;vec4 w=modelMatrix*vec4(position,1.);vec2 u=vec2(w.x/${PL.toFixed(2)}+.5,.5-w.z/${PW.toFixed(2)});
+ w.y+=clamp((texture2D(S,u).r-.502)*${(255/60*HS).toFixed(4)},-.6,.14)+.012;gl_Position=projectionMatrix*viewMatrix*w;}`,
+`varying vec2 vL;uniform float FT,FW;
+void main(){float r=length(vL)/.34,a=atan(vL.y,vL.x),f=(1.-smoothstep(.2,1.,r))*(.55+.45*sin(a*7.+FT*5.+sin(r*14.-FT*8.)*1.8));
+ gl_FragColor=vec4(vec3(.95,.99,1.)*(skyH*.35+sunCol*.6+N*.25),f*.45*FW);}`,{transparent:true,depthWrite:false}),HIT);
+scene.add(slideObj,sheet,stream,foam);
+
+// the stream's effect on the water: an uneven push at the landing spot (it averages to zero, so the pool level
+// never drifts) which sends out small ripples, plus a gentle ring every 0.3 s so nearby toys drift away
+let flow=false,segs=[],pourW=0,lastPour=0,footDirty=true,SLS=null;
+let clock=()=>performance.now()/1000;
+function pour(){
+ if(pourW<.01)return;const t=simT,f=pourW*.06*(Math.sin(t*31)+.6*Math.sin(t*47.3+1.3)+.4*Math.sin(t*19.1+.4));
+ for(let j=-4;j<=4;j++)for(let i=-4;i<=4;i++){const q=len(i,j)/4.2;if(q<1)A[(IY+j)*gw+IX+i]+=f*(1+Math.cos(q*Math.PI))/2}
+ if(pourW>.5&&simT-lastPour>.3){lastPour=simT;emit(IX,IY,.12,null)}
+}
+// Switching on releases water at the top; switching off stops it there while what's already on the way keeps going.
+// (With reduced motion, or when the page opens, it switches instantly.)
+function setFlow(on,say,instant){
+ const t=clock()-(instant||still.matches?100:0);
+ if(on&&!flow){segs.push({on:t,off:null});if(segs.length>4)segs.shift()}else if(!on&&flow)segs[segs.length-1].off=t;
+ flow=on;wake();if(say)toast(on?'Slide water on':'Slide water off');
+}
+// each frame: drop water that has all landed, hand the rest to the shaders, and see how much is landing right now
+function flowTick(){
+ const t=clock(),have=a=>segs.reduce((m,s)=>{const lo=s.off===null?-1:t-s.off,hi=t-s.on;return Math.max(m,ss(lo-.05,lo+.05,a)*(1-ss(hi-.05,hi+.05,a)))},0);
+ segs=segs.filter(s=>s.off===null||t-s.off<TL+.5);
+ U.SEG.value.forEach((v,i)=>{const s=segs[i];s?v.set(s.off===null?-1:t-s.off,t-s.on):v.set(9,8)});
+ pourW=have(TL);U.FW.value=pourW;sheet.visible=stream.visible=foam.visible=segs.length>0;
+}
+// where the slide's shadow falls on the water (projected along the sunlight), for the pool floor's shading
+function slideShadow(){const d=U.sunDir.value;SLS=[];for(let i=0;i<=24;i++){const p=slideCurve.getPointAt(i/24),k=(p.y+SLR*.5-WY)/Math.max(d.y,.05);SLS.push(W2G(p.x-d.x*k,p.z-d.z*k))}}
+
+
 // ---------- camera: angle from the slider; distance and framing fitted so the whole pool fits between the hint and controls ----------
 const FIT=[],MID=[];for(const a of[-1,1])for(const b of[-1,1])for(const y of[.02,-.3]){FIT.push(new THREE.Vector3(a*(PL/2+CW),y,b*(PW/2+CW)));MID.push(new THREE.Vector3(a*(PL/2+CW)*(b>0),y,a*(PW/2+CW)*(b<0)))}
+for(const x of[-.35,4.9])for(const z of[-5.15,-3.5])for(const y of[0,2.95]){const v=new THREE.Vector3(x,y,z);FIT.push(v);MID.push(v)}
 let portrait=false;
 function fit(){
  const w=cv.clientWidth,h=cv.clientHeight,top=hint.getBoundingClientRect().bottom+6,bot=h-document.querySelector('.ctl').getBoundingClientRect().top+6;
@@ -402,10 +491,12 @@ let hoverEv=null;
 const onWater=()=>ray.ray.intersectPlane(plane,hp)?W2G(hp.x,hp.z):null;
 const hit=p=>{for(let k=toys.length;k--;){const t=toys[k],co=Math.cos(t.a),si=Math.sin(t.a),dx=p[0]-t.x,dy=p[1]-t.y,lx=dx*co+dy*si,ly=dy*co-dx*si;
  if(t.cs.some(([x,y,r])=>len(lx-x,ly-y)<r+tol))return t}};
-const pickToy=p=>{const hs=ray.intersectObjects(toyMeshes,true);if(hs.length){let o=hs[0].object;while(!o.userData.toy)o=o.parent;return[o.userData.toy,W2G(hs[0].point.x,hs[0].point.z)]}
- const t=p&&hit(p);return t?[t,p]:null};
+const pickToy=p=>{const hs=ray.intersectObjects(toyMeshes,true);if(hs.length){let o=hs[0].object;while(!o.userData.toy)o=o.parent;return[o.userData.toy,W2G(hs[0].point.x,hs[0].point.z),hs[0].distance]}
+ const t=p&&hit(p);return t?[t,p,Infinity]:null};
+const onSlide=pk=>{const h=ray.intersectObject(slideObj,true)[0];return h&&(!pk||h.distance<pk[2])};
 cv.addEventListener('pointerdown',e=>{
  hint.style.opacity=0;cast(e);const p=onWater(),pk=pickToy(p);
+ if(onSlide(pk)){setFlow(!flow,1);return}
  if(!pk){if(p&&p[0]>1&&p[1]>1&&p[0]<gw-1&&p[1]<gh-1)splash(p[0],p[1]);return}
  const[t,[hx,hy]]=pk,co=Math.cos(t.a),si=Math.sin(t.a),dx=hx-t.x,dy=hy-t.y,q=p||[hx,hy];
  dunk(t);grab={t,lx:dx*co+dy*si,ly:dy*co-dx*si,x:hx,y:hy,ox:hx-q[0],oy:hy-q[1],id:e.pointerId};
@@ -440,7 +531,7 @@ function setTime(v){
  const pick=a=>mixC(mixC(a[0],a[1],K),a[2],N);
  U.N.value=N;U.sunCol.value.copy(pick(SUN));U.skyZ.value.copy(pick(ZEN));U.skyH.value.copy(pick(HOR));
  U.sunDir.value.set(-.6*Math.cos(el),Math.sin(el),-.8*Math.cos(el)).lerp(new THREE.Vector3(.45,.8,.4),N).normalize();
- sunL.position.copy(U.sunDir.value).multiplyScalar(50);sunL.color.copy(U.sunCol.value);sunL.intensity=.85;
+ sunL.position.copy(sunL.target.position).addScaledVector(U.sunDir.value,25);R3.shadowMap.needsUpdate=true;slideShadow();footDirty=true;sunL.color.copy(U.sunCol.value);sunL.intensity=.85*(1-.7*N);fillL.color.copy(U.sunCol.value);fillL.intensity=.85*.7*N;fillL.position.copy(U.sunDir.value);
  hemi.color.copy(U.skyZ.value).lerp(C(1,1,1),.55*(1-N));hemi.groundColor.copy(mixC(C(.55,.53,.5),C(.1,.42,.48),N));hemi.intensity=.42+.5*N;
  scene.fog.color.copy(U.skyH.value);
  const r=document.documentElement.style,hx='#'+U.skyH.value.getHexString();
@@ -494,8 +585,9 @@ function frame(now){
  const fdt=Math.min(now-prev,50)/1000;acc=Math.min(acc+now-prev,50);prev=now;
  if(anim){const k=Math.min((now-anim[3])/1500,1);anim[0](anim[1]+(anim[2]-anim[1])*k*k*(3-2*k));if(k===1)anim=null}
  // once the water is flat and every toy is still, stop simulating until something is touched
- const idle=waterFlat&&resting();
- while(acc>=DT*1000){if(!idle){phys();toys.forEach(stamp);step();waterDirty=true}simT+=DT;acc-=DT*1000}
+ flowTick();
+ const idle=!segs.length&&waterFlat&&resting();
+ while(acc>=DT*1000){if(!idle){phys();toys.forEach(stamp);pour();step();waterDirty=true}simT+=DT;acc-=DT*1000}
  if(waterDirty){
   let mx=0;
   for(let y=0,i=0;y<gh;y++)for(let x=0;x<gw;x++,i++){
@@ -507,17 +599,19 @@ function frame(now){
   wtex.needsUpdate=true;waterDirty=false;dirty=true;
  }
  // toy footprints (alpha = shadow on the floor, red = how far to push the water down under the toy); only when a toy moved
- if(toys.some(t=>t.x!==t.fx||t.y!==t.fy||t.a!==t.fa)){
-  sx.clearRect(0,0,gw,gh);
+ // (alpha = shadow, blue = a toy is here, red = push the water down); the slide's shadow is alpha only
+ if(footDirty||toys.some(t=>t.x!==t.fx||t.y!==t.fy||t.a!==t.fa)){
+  footDirty=false;sx.clearRect(0,0,gw,gh);
+  if(SLS){sx.strokeStyle='#000';sx.lineWidth=(2*SLR+.07)/CELL;sx.lineCap=sx.lineJoin='round';sx.beginPath();SLS.forEach(([x,y],i)=>i?sx.lineTo(x,y):sx.moveTo(x,y));sx.stroke()}
   for(const t of toys){t.fx=t.x;t.fy=t.y;t.fa=t.a;sx.save();sx.translate(t.x,t.y);sx.rotate(t.a);
-   sx.fillStyle='#000';sx.beginPath();t.sil(sx);sx.fill('evenodd');
-   sx.fillStyle=`rgb(${t.dip*255|0},0,0)`;sx.beginPath();(t.dipSil||t.sil)(sx);sx.fill('evenodd');sx.restore()}
+   sx.fillStyle='#00f';sx.beginPath();t.sil(sx);sx.fill('evenodd');
+   sx.fillStyle=`rgb(${t.dip*255|0},0,255)`;sx.beginPath();(t.dipSil||t.sil)(sx);sx.fill('evenodd');sx.restore()}
   stex.needsUpdate=true;dirty=true;
  }
- if(hoverEv){cast(hoverEv);cv.style.cursor=pickToy(onWater())?'grab':'';hoverEv=null}
+ if(hoverEv){cast(hoverEv);const pk=pickToy(onWater());cv.style.cursor=onSlide(pk)?'pointer':pk?'grab':'';hoverEv=null}
  place(fdt);
  // the floor's light pattern animates on Medium and up, so those levels draw every frame; otherwise only on change
- if(dirty||(U.Qu.value>0&&!still.matches)){U.T.value=still.matches?0:now/2500;R3.render(scene,cam);dirty=false}
+ if(dirty||((U.Qu.value>0||segs.length)&&!still.matches)){U.T.value=still.matches?0:now/2500;U.FT.value=still.matches?0:now/1000;R3.render(scene,cam);dirty=false}
  requestAnimationFrame(frame);
 }
 // start from the viewer's saved choice, else High on phones/tablets and Max elsewhere
@@ -525,6 +619,7 @@ let saved=null;try{saved=localStorage.getItem('pool-graphics')}catch(e){}
 setQuality(saved!==null?+saved:matchMedia('(pointer:coarse)').matches?2:3);
 addEventListener('resize',resize);resize();
 // prepare every shader now (the selection ring's too), so nothing stutters the first time it appears
+setFlow(!still.matches,0,1);
 selRing.visible=true;R3.compile(scene,cam);selRing.visible=false;
 requestAnimationFrame(frame);
 </script>
