@@ -113,12 +113,12 @@ const len=(x,y)=>Math.sqrt(x*x+y*y),clamp=(x,a,b)=>Math.max(a,Math.min(b,x)),ss=
 
 // ---------- toys (units = water grid cells; cs = collision circles; fp = how deep each spot sits in the water) ----------
 const TUBES=[[-19,-16,-19,16,4.6],[-19,-16,17,-16,4.2],[-19,16,17,16,4.2],[19,-11,19,11,2.8]],SPR=['#fff','#ffd23f','#3ec9c0','#6b5bd6','#ff5a4f'];
-const ball={cs:[[0,0,8]],R:9,ρ:.1,d:.5,fp:(x,y)=>1-ss(2,6,len(x,y)),draw(g,s,[lx,ly]){
+const ball={cs:[[0,0,8]],R:9,pu:1.35,ρ:.1,d:.5,fp:(x,y)=>1-ss(2,6,len(x,y)),draw(g,s,[lx,ly]){
  ['#e63e36','#fff','#2d6fd8','#fff','#f6c22e','#fff'].forEach((f,i)=>{g.beginPath();g.moveTo(0,0);g.arc(0,0,8,i*Math.PI/3,(i+1)*Math.PI/3);g.fillStyle=s||f;g.fill()});
  if(s)return;circ(g,0,0,1.8,'#fff');
  circ(g,0,0,8,grd(g.createRadialGradient(lx*3.5,ly*3.5,0,0,0,8),0,'#fff9',.35,'#fff0',.7,'#00142800',1,'#00142866'));
 }};
-const ring={cs:[[0,0,16]],R:17,ρ:.22,d:.7,fp:(x,y)=>tube(Math.abs(len(x,y)-11.25),4.75),draw(g,s,[lx,ly]){
+const ring={cs:[[0,0,16]],R:17,pu:1.2,ρ:.22,d:.7,fp:(x,y)=>tube(Math.abs(len(x,y)-11.25),4.75),draw(g,s,[lx,ly]){
  const body=()=>{g.beginPath();g.arc(0,0,16,0,7);g.moveTo(6.5,0);g.arc(0,0,6.5,0,7)};
  body();g.fillStyle=s||'#e5ab6c';g.fill('evenodd');if(s)return;
  g.beginPath();
@@ -130,13 +130,13 @@ const ring={cs:[[0,0,16]],R:17,ρ:.22,d:.7,fp:(x,y)=>tube(Math.abs(len(x,y)-11.2
  body();g.fillStyle=grd(g.createRadialGradient(0,0,6.5,0,0,16),0,'#0005',.28,'#0000',.72,'#0000',1,'#0004');g.fill('evenodd');
  body();g.fillStyle=grd(g.createLinearGradient(lx*16,ly*16,-lx*16,-ly*16),0,'#fff5',.5,'#fff0',1,'#0003');g.fill('evenodd');
 }};
-const noodle=col=>({cs:[-26,-17.3,-8.7,0,8.7,17.3,26].map(x=>[x,0,3.6]),R:31,ρ:.3,d:.6,fp:(x,y)=>tube(seg(x,y,-26.4,0,26.4,0),3.6),draw(g,s,[,ly]){
+const noodle=col=>({pu:1,cs:[-26,-17.3,-8.7,0,8.7,17.3,26].map(x=>[x,0,3.6]),R:31,ρ:.3,d:.6,fp:(x,y)=>tube(seg(x,y,-26.4,0,26.4,0),3.6),draw(g,s,[,ly]){
  const body=()=>{g.beginPath();g.roundRect(-30,-3.6,60,7.2,2.4)},k=ly<0?-3.6:3.6;
  body();g.fillStyle=s||col;g.fill();if(s)return;
  body();g.fillStyle=grd(g.createLinearGradient(0,-k,0,k),0,'#0000004d',.5,'#fff0',.8,'#fff6',1,'#fff2');g.fill();
  g.strokeStyle='#0000001f';g.lineWidth=.35;for(const y of[-1.2,1.2]){g.beginPath();g.moveTo(-29,y);g.lineTo(29,y);g.stroke()}
 }});
-const chair={cs:[[-11,-9,11.5],[-11,9,11.5],[10,-9,11.5],[10,9,11.5]],R:30,ρ:.4,d:1,
+const chair={pu:.7,cs:[[-11,-9,11.5],[-11,9,11.5],[10,-9,11.5],[10,9,11.5]],R:30,ρ:.4,d:1,
  fp:(x,y)=>{let v=x>-17&&x<20&&Math.abs(y)<12.5?.35:0;for(const t of TUBES)v=Math.max(v,tube(seg(x,y,...t),t[4]));return v},
  draw(g,s,[lx,ly]){
  const pass=(w,k,f)=>{g.strokeStyle=f;for(const[a,b,c,d,r]of TUBES){g.lineWidth=2*r*w;g.beginPath();g.moveTo(a+lx*k,b+ly*k);g.lineTo(c+lx*k,d+ly*k);g.stroke()}};
@@ -161,7 +161,7 @@ function resize(){
  P=[m,m,c.width-2*m,c.height-2*m];cell=Math.max(P[2],P[3])/300;
  gw=sc.width=Math.round(P[2]/cell);gh=sc.height=Math.round(P[3]/cell);
  A=new Float32Array(gw*gh);V=new Float32Array(gw*gh);px=new Uint8ClampedArray(gw*gh*4);
- for(const t of toys){t.x=ow?t.x*gw/ow:t.u*gw;t.y=oh?t.y*gh/oh:t.v*gh;t.bi=null}
+ for(const t of toys){t.x=ow?t.x*gw/ow:t.u*gw;t.y=oh?t.y*gh/oh:t.v*gh;t.bi=null}waves.length=0;
  gl.uniform4fv(U.P,P);gl.uniform1f(U.D,d);gl.uniform1f(U.V,P[3]>P[2]?1:0);
 }
 // Height A, vertical velocity V. The second term is viscosity, so fine chop dies out faster than long swells.
@@ -191,14 +191,16 @@ function drop(x,y,r,s){
 }
 
 function splash(x,y){
- drop(x,y,5,1.6);
- for(const t of toys){const dx=t.x-x,dy=t.y-y,d=Math.hypot(dx,dy)||1,f=clamp(1-(d-t.R*.6)/28,0,1);
-  if(f){const k=f*50/(1+t.m/120);t.vx+=dx/d*k;t.vy+=dy/d*k;t.vz+=f*5}}
+ drop(x,y,5,1.6);emit(x,y,1.2,null);
 }
-const dunk=t=>t.vz+=9;
+const dunk=t=>{t.vz+=9;emit(t.x,t.y,.5*t.R/20,t,t.R*.7)};
 
 // ---------- toy physics ----------
-const DT=1/120,LD=Math.exp(-1.3*DT),AD=Math.exp(-2.4*DT);
+const DT=1/120,LD=Math.exp(-.8*DT),AD=Math.exp(-1.5*DT),GS=150,WS=70,KW=210,FLD=Math.exp(-2*DT),IMG=[-1,0,1].flatMap(a=>[-1,0,1].map(b=>[a,b]));
+let simT=0;const waves=[];
+// Wave pushes are tracked as expanding rings (a splash, a dunk, or a moving toy's wake) that sweep outward at the
+// water's wave speed. A toy only feels rings it didn't make itself, so its own wake can't push it along.
+const emit=(x,y,a,src,r0=0)=>{waves.push({x,y,a,src,r0,t0:simT});if(waves.length>28)waves.shift()};
 const grad=(x,y)=>{const i=clamp(Math.round(y),1,gh-2)*gw+clamp(Math.round(x),1,gw-2);return[(A[i+1]-A[i-1])/2,(A[i+gw]-A[i-gw])/2,A[i]]};
 function hitc(a,b,px,py,nx,ny,pen,k=.8){
  const ia=1/a.m,ib=b?1/b.m:0,s=pen/(ia+ib)*k,rax=px-a.x,ray=py-a.y,rbx=b?px-b.x:0,rby=b?py-b.y:0;
@@ -212,15 +214,40 @@ function hitc(a,b,px,py,nx,ny,pen,k=.8){
  app(-ny,nx,clamp((vx*ny-vy*nx)/em(-ny,nx),-.3*jn,.3*jn));
 }
 const world=t=>{const co=Math.cos(t.a),si=Math.sin(t.a);return t.cs.map(([x,y,r])=>[t.x+x*co-y*si,t.y+x*si+y*co,r])};
-let grab=null,selT=null;
+let grab=null,selT=null,trail=[];
 function phys(){
  for(const t of toys){
   const co=Math.cos(t.a),si=Math.sin(t.a);let fx=0,fy=0,tq=0,hc=0;
   const push=(rx,ry,Fx,Fy)=>{fx+=Fx;fy+=Fy;tq+=rx*Fy-ry*Fx};
-  for(const[x,y,r]of t.cs){const rx=x*co-y*si,ry=x*si+y*co,[gx,gy,h]=grad(t.x+rx,t.y+ry),w=-r*r*t.ρ*160;hc+=h/t.cs.length;push(rx,ry,gx*w,gy*w)}
+  if(t.bi&&t.bi.length){
+   // gentle rocking from the local surface slope, and the average water height for bobbing
+   let sw=0,Fx=0,Fy=0,T=0;
+   for(let k=0;k<t.bi.length;k++){const i=t.bi[k],w=t.bv[k],gx=(A[i+1]-A[i-1])/2,gy=(A[i+gw]-A[i-gw])/2,x=i%gw-t.x,y=(i/gw|0)-t.y;
+    Fx-=gx*w;Fy-=gy*w;T-=(x*gy-y*gx)*w;hc+=A[i]*w;sw+=w}
+   let k=t.m*t.pu*GS/sw;fx+=Fx*k;fy+=Fy*k;tq+=T*k;hc/=sw;
+   // passing rings shove whichever parts of the toy they're crossing: bigger rings push harder, and a ring
+   // catching one end of a long toy turns it. Wall bounces are rings from mirror-image sources across each wall
+   // (and corner); a toy never feels the direct ring it made itself, but can be hit by its own echo.
+   for(const ev of waves){
+    const age=simT-ev.t0,r=ev.r0+age*WS,a0=ev.a*Math.exp(-.7*age)/Math.sqrt(1+r/8);
+    if(a0<.02)continue;
+    for(const[mx,my]of IMG){
+     if(!mx&&!my&&ev.src===t)continue;
+     const ox=mx<0?-ev.x:mx>0?2*(gw-1)-ev.x:ev.x,oy=my<0?-ev.y:my>0?2*(gh-1)-ev.y:ev.y,amp=a0*.8**(!!mx+!!my);
+     if(Math.abs(len(t.x-ox,t.y-oy)-r)>t.R+15)continue;
+     Fx=Fy=T=0;
+     for(let k=0;k<t.bi.length;k++){const i=t.bi[k],cx=i%gw,cy=i/gw|0,dx=cx-ox,dy=cy-oy,d=len(dx,dy)||1,b=(d-r)/6;
+      if(b*b>6)continue;const w=t.bv[k]*Math.exp(-b*b)/d,px=dx*w,py=dy*w;Fx+=px;Fy+=py;T+=(cx-t.x)*py-(cy-t.y)*px}
+     k=t.m*t.pu*KW*amp/sw;fx+=Fx*k;fy+=Fy*k;tq+=T*k;
+    }
+   }
+   // a moving toy sends out its own wake rings every ~0.08s
+   const sp=len(t.vx,t.vy);if(sp>8&&simT-(t.we||0)>.08){t.we=simT;emit(t.x,t.y,Math.min(1.2,sp/80)*t.R/20,t,t.R*.7)}
+  }
   if(grab&&grab.t===t){const rx=grab.lx*co-grab.ly*si,ry=grab.lx*si+grab.ly*co;
    push(rx,ry,t.m*(420*(grab.x-t.x-rx)-32*(t.vx-t.w*ry)),t.m*(420*(grab.y-t.y-ry)-32*(t.vy+t.w*rx)))}
-  t.vx=(t.vx+fx/t.m*DT)*LD;t.vy=(t.vy+fy/t.m*DT)*LD;t.w=(t.w+tq/t.I*DT)*AD;
+  const ld=simT<(t.fl||0)?FLD:LD;// extra drag for a moment after you let go, so flings don't glide far
+  t.vx=(t.vx+fx/t.m*DT)*ld;t.vy=(t.vy+fy/t.m*DT)*ld;t.w=(t.w+tq/t.I*DT)*AD;
   const sp=Math.hypot(t.vx,t.vy);if(sp>250){t.vx*=250/sp;t.vy*=250/sp}
   t.x+=t.vx*DT;t.y+=t.vy*DT;t.a+=t.w*DT;
   // bob: springs toward riding the local water level (held toys sit a little lower)
@@ -245,10 +272,16 @@ const hit=p=>{for(let k=toys.length;k--;){const t=toys[k],co=Math.cos(t.a),si=Ma
  if(t.cs.some(([x,y,r])=>Math.hypot(lx-x,ly-y)<r+tol))return[t,lx,ly]}};
 o.addEventListener('pointerdown',e=>{hint.style.opacity=0;const p=toGrid(e),h=hit(p);
  if(!h){if(p[0]>1&&p[1]>1&&p[0]<gw-1&&p[1]<gh-1)splash(p[0],p[1]);return}
- dunk(h[0]);grab={t:h[0],lx:h[1],ly:h[2],x:p[0],y:p[1],id:e.pointerId};toys.push(toys.splice(toys.indexOf(h[0]),1)[0]);
+ dunk(h[0]);grab={t:h[0],lx:h[1],ly:h[2],x:p[0],y:p[1],id:e.pointerId};trail=[[e.timeStamp,p[0],p[1]]];toys.push(toys.splice(toys.indexOf(h[0]),1)[0]);
  o.setPointerCapture(e.pointerId);o.style.cursor='grabbing'});
-o.addEventListener('pointermove',e=>{const p=toGrid(e);if(grab){if(e.pointerId===grab.id){grab.x=clamp(p[0],0,gw);grab.y=clamp(p[1],0,gh)}}else o.style.cursor=hit(p)?'grab':''});
-for(const ev of['pointerup','pointercancel'])o.addEventListener(ev,()=>{grab=null;o.style.cursor=''});
+o.addEventListener('pointermove',e=>{const p=toGrid(e);if(grab){if(e.pointerId===grab.id){grab.x=clamp(p[0],0,gw);grab.y=clamp(p[1],0,gh);trail.push([e.timeStamp,grab.x,grab.y]);if(trail.length>12)trail.shift()}}else o.style.cursor=hit(p)?'grab':''});
+// On release the toy keeps the speed your pointer had over the last ~0.1s (none if you'd already stopped).
+o.addEventListener('pointerup',e=>{
+ if(grab){const n=trail[trail.length-1],f=trail.find(s=>n[0]-s[0]<=100),dt=(n[0]-f[0])/1000;
+  if(dt>.01&&e.timeStamp-n[0]<60){grab.t.vx=(n[1]-f[1])/dt;grab.t.vy=(n[2]-f[2])/dt}grab.t.fl=simT+1.5}
+ grab=null;o.style.cursor='';
+});
+o.addEventListener('pointercancel',()=>{grab=null;o.style.cursor=''});
 o.addEventListener('keydown',e=>{
  const d={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,1],ArrowDown:[0,-1]}[e.key];
  if(e.key===' '||e.key==='Enter'){selT=toys[(toys.indexOf(selT)+1)%toys.length];dunk(selT)}
@@ -277,7 +310,7 @@ let acc=0,prev=performance.now();
 function frame(now){
  const fdt=Math.min(now-prev,50)/1000;acc=Math.min(acc+now-prev,50);prev=now;
  if(anim){const k=Math.min((now-anim[2])/1500,1);setTime(anim[0]+(anim[1]-anim[0])*k*k*(3-2*k));if(k===1)anim=null}
- while(acc>=DT*1000){phys();toys.forEach(stamp);step();acc-=DT*1000}
+ while(acc>=DT*1000){phys();toys.forEach(stamp);step();simT+=DT;acc-=DT*1000}
  for(let y=0,i=0;y<gh;y++)for(let x=0;x<gw;x++,i++){
   const l=A[x?i-1:i],r=A[x<gw-1?i+1:i],d=A[y?i-gw:i],u=A[y<gh-1?i+gw:i];
   px[i*4]=128+(l-r)*400;px[i*4+1]=128+(d-u)*400;px[i*4+2]=128+(l+r+d+u-4*A[i])*400;
