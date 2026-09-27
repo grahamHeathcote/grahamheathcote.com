@@ -65,6 +65,10 @@ const len=(x,y)=>Math.sqrt(x*x+y*y),clamp=(x,a,b)=>Math.max(a,Math.min(b,x)),ss=
 // ---------- world: water grid is gw×gh cells of 4 cm. Grid x → world x, grid y → world −z (metres, deck at y=0) ----------
 const gw=300,gh=180,CELL=.04,PL=gw*CELL,PW=gh*CELL,WY=-.15,HS=.3,CW=.34,
  G2W=(gx,gy)=>[(gx-gw/2)*CELL,-(gy-gh/2)*CELL],W2G=(x,z)=>[x/CELL+gw/2,-z/CELL+gh/2];
+// Work skipping: waterDirty = the water changed since it was last sent to the GPU; waterFlat = it has settled to
+// nothing visible; dirty = something on screen changed, so the next frame must be drawn.
+let waterDirty=true,waterFlat=false,dirty=true;
+const wake=()=>{waterDirty=true;waterFlat=false;dirty=true};
 const A=new Float32Array(gw*gh),V=new Float32Array(gw*gh),px=new Uint8ClampedArray(gw*gh*4),sc=document.createElement('canvas'),sx=sc.getContext('2d');
 sc.width=gw;sc.height=gh;
 
@@ -153,7 +157,7 @@ function drop(x,y,r,s){
 }
 
 function splash(x,y){
- drop(x,y,7,2);emit(x,y,1.2,null);
+ drop(x,y,7,2);emit(x,y,1.2,null);wake();
 }
 const dunk=t=>{t.vz+=9;emit(t.x,t.y,.5*t.R/20,t,t.R*.7)};
 
@@ -164,7 +168,6 @@ let simT=0;const waves=[];
 // Wave pushes are tracked as expanding rings (a splash, a dunk, or a moving toy's wake) that sweep outward at the
 // water's wave speed. A toy only feels rings it didn't make itself, so its own wake can't push it along.
 const emit=(x,y,a,src,r0=0)=>{waves.push({x,y,a,src,r0,t0:simT});if(waves.length>28)waves.shift()};
-const grad=(x,y)=>{const i=clamp(Math.round(y),1,gh-2)*gw+clamp(Math.round(x),1,gw-2);return[(A[i+1]-A[i-1])/2,(A[i+gw]-A[i-gw])/2,A[i]]};
 function hitc(a,b,px,py,nx,ny,pen,k=.8,fresh=true){
  const ia=1/a.m,ib=b?1/b.m:0,s=pen/(ia+ib)*k,rax=px-a.x,ray=py-a.y,rbx=b?px-b.x:0,rby=b?py-b.y:0;
  a.x+=nx*s*ia;a.y+=ny*s*ia;if(b){b.x-=nx*s*ib;b.y-=ny*s*ib}
@@ -243,7 +246,7 @@ function phys(){
 
 
 // ---------- 3D scene ----------
-const R3=new THREE.WebGLRenderer({canvas:cv,antialias:true});R3.setPixelRatio(Math.min(devicePixelRatio||1,2));
+const R3=new THREE.WebGLRenderer({canvas:cv,antialias:true,powerPreference:'high-performance',stencil:false});R3.setPixelRatio(Math.min(devicePixelRatio||1,2));
 const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(40,1,.1,600);scene.fog=new THREE.Fog(0,45,170);
 const wtex=new THREE.DataTexture(new Uint8Array(px.buffer),gw,gh,THREE.RGBAFormat);wtex.magFilter=wtex.minFilter=THREE.LinearFilter;
 const stex=new THREE.CanvasTexture(sc);stex.flipY=false;stex.generateMipmaps=false;stex.magFilter=stex.minFilter=THREE.LinearFilter;
@@ -303,7 +306,7 @@ void main(){
  float tf=(a*vP.x+b-vP.y)/(rd.y-a*rd.x),tx=(sx*PL*.5-vP.x)/(rd.x+sx*1e-5),tz=(sz*PW*.5-vP.z)/(rd.z+sz*1e-5),t=min(tf,min(tx,tz));
  vec3 h=vP+rd*t,hn=t==tf?normalize(vec3(-a,1.,0.)):t==tx?vec3(-sx,0.,0.):vec3(0.,0.,-sz);
  vec3 col=tiles(h,hn)*light(h,hn,1.);
- for(int i=0;i<4;i++)col=mix(col,mix(vec3(.72,.76,.76),vec3(2.4,2.8,2.8),N),(1.-smoothstep(.1,.12,length(h-lampPos(i))))*step(.5,abs(hn.z)));
+ if(abs(hn.z)>.5)for(int i=0;i<4;i++)col=mix(col,mix(vec3(.72,.76,.76),vec3(2.4,2.8,2.8),N),1.-smoothstep(.1,.12,length(h-lampPos(i))));
  col*=exp(-vec3(.42,.1,.07)*(t+WY-h.y));
  if(N>.01){vec3 m=vP+rd*t*.5;float gl=0.;for(int i=0;i<4;i++)gl+=exp(-length(m-lampPos(i))*.9);col+=N*vec3(.1,.45,.55)*gl*min(t,3.)*.35;}
  vec3 rr=reflect(v,n);rr.y=abs(rr.y);
@@ -341,13 +344,36 @@ const deck=mesh(dg,new THREE.MeshLambertMaterial({map:pav}));
 // sky dome (also what the water reflects), with stars at night
 const skyDome=mesh(new THREE.SphereGeometry(500,32,16),shade(VS,`varying vec3 vP;
 void main(){vec3 d=normalize(vP-cameraPosition),c=sky(d);c+=N*step(.997,hsh(floor(d.xz/max(d.y,.08)*90.)))*smoothstep(.02,.2,d.y)*.9;gl_FragColor=vec4(c,1.);}`,{side:THREE.BackSide,depthWrite:false}));
-skyDome.renderOrder=-1;
+// Opaque draw order: toys first (0), then water, walls, coping, deck, and the sky last. The GPU then skips shading
+// anything already covered: wall under the water, water under a toy, sky behind everything. (Coping after walls keeps
+// the seam where they overlap looking exactly as before.)
+water.renderOrder=1;walls.renderOrder=2;coping.renderOrder=3;deck.renderOrder=4;skyDome.renderOrder=5;
 
 const sunL=new THREE.DirectionalLight(0xffffff,1),hemi=new THREE.HemisphereLight(0xffffff,0x777777,.6);
 const selRing=mesh(new THREE.RingGeometry(.9,1,48),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.85,depthTest:false}));
 selRing.rotation.x=-Math.PI/2;selRing.visible=false;
 scene.add(skyDome,deck,coping,walls,water,sunL,hemi,selRing);
-for(const t of toys){t.mesh=t.mk();t.mesh.userData.toy=t;scene.add(t.mesh)}
+// Merge a toy's parts that share a material into one mesh: identical triangles, far fewer draw calls
+// (the donut's 34 sprinkles become 5 draws, the chair's 15 parts become 3).
+function bake(root){
+ root.updateMatrixWorld(true);const sets=new Map(),out=new THREE.Group();
+ root.traverse(o=>{if(o.isMesh){if(!sets.has(o.material))sets.set(o.material,[]);sets.get(o.material).push(o)}});
+ for(const[mat,ms]of sets){
+  const geos=ms.map(m=>m.geometry.clone().applyMatrix4(m.matrixWorld));
+  if(geos.length===1){out.add(new THREE.Mesh(geos[0],mat));continue}
+  const g=new THREE.BufferGeometry(),idx=[];let off=0;
+  for(const n of Object.keys(geos[0].attributes)){
+   const it=geos[0].attributes[n].itemSize,arr=new Float32Array(geos.reduce((s,q)=>s+q.attributes[n].array.length,0));let o=0;
+   for(const q of geos){arr.set(q.attributes[n].array,o);o+=q.attributes[n].array.length}
+   g.setAttribute(n,new THREE.BufferAttribute(arr,it));
+  }
+  for(const q of geos){const ix=q.index.array;for(let k=0;k<ix.length;k++)idx.push(ix[k]+off);off+=q.attributes.position.count}
+  g.setIndex(idx);out.add(new THREE.Mesh(g,mat));
+ }
+ root.traverse(o=>o.isMesh&&o.geometry.dispose());
+ return out;
+}
+for(const t of toys){t.mesh=bake(t.mk());t.mesh.userData.toy=t;scene.add(t.mesh)}
 const toyMeshes=toys.map(t=>t.mesh);
 
 // ---------- camera: angle from the slider; distance and framing fitted so the whole pool fits between the hint and controls ----------
@@ -356,7 +382,7 @@ let portrait=false;
 function fit(){
  const w=cv.clientWidth,h=cv.clientHeight,top=hint.getBoundingClientRect().bottom+6,bot=h-document.querySelector('.ctl').getBoundingClientRect().top+6;
  const v=+VW.value,near=1-.5*(1-ss(0,.4,v));   // at poolside the camera comes in to about half the fitted distance
- portrait=h>w;cam.aspect=w/h;cam.fov=(portrait?50:38)+10*(1-v);cam.updateProjectionMatrix();
+ dirty=true;portrait=h>w;cam.aspect=w/h;cam.fov=(portrait?50:38)+10*(1-v);cam.updateProjectionMatrix();
  const ph=(15+75*v)*Math.PI/180,hd=portrait?new THREE.Vector3(1,0,0):new THREE.Vector3(0,0,1),
   dir=hd.clone().multiplyScalar(Math.cos(ph)).addScaledVector(Y,Math.sin(ph)),up=hd.clone().multiplyScalar(-Math.sin(ph)).addScaledVector(Y,Math.cos(ph)),tgt=new THREE.Vector3(0,-.3,0);
  const yT=1-2*top/h,yB=-1+2*bot/h,xS=1-32/w,q=new THREE.Vector3();
@@ -372,6 +398,7 @@ function resize(){R3.setSize(cv.clientWidth,cv.clientHeight,false);fit()}
 // ---------- input: rays from the pointer onto toys, or onto the water plane ----------
 const ray=new THREE.Raycaster(),ndc=new THREE.Vector2(),plane=new THREE.Plane(Y,-WY),hp=new THREE.Vector3();
 const cast=e=>{const r=cv.getBoundingClientRect();ndc.set((e.clientX-r.left)/r.width*2-1,1-(e.clientY-r.top)/r.height*2);ray.setFromCamera(ndc,cam)};
+let hoverEv=null;
 const onWater=()=>ray.ray.intersectPlane(plane,hp)?W2G(hp.x,hp.z):null;
 const hit=p=>{for(let k=toys.length;k--;){const t=toys[k],co=Math.cos(t.a),si=Math.sin(t.a),dx=p[0]-t.x,dy=p[1]-t.y,lx=dx*co+dy*si,ly=dy*co-dx*si;
  if(t.cs.some(([x,y,r])=>len(lx-x,ly-y)<r+tol))return t}};
@@ -385,9 +412,9 @@ cv.addEventListener('pointerdown',e=>{
  trail=[[e.timeStamp,hx,hy]];cv.setPointerCapture(e.pointerId);cv.style.cursor='grabbing';
 });
 cv.addEventListener('pointermove',e=>{
- if(!grab&&e.pointerType!=='mouse')return;cast(e);const p=onWater();
- if(grab){if(e.pointerId===grab.id&&p){grab.x=clamp(p[0]+grab.ox,0,gw);grab.y=clamp(p[1]+grab.oy,0,gh);trail.push([e.timeStamp,grab.x,grab.y]);if(trail.length>12)trail.shift()}}
- else cv.style.cursor=pickToy(p)?'grab':'';
+ if(!grab){if(e.pointerType==='mouse')hoverEv=e;return}   // hover is checked once per frame, in the loop
+ cast(e);const p=onWater();
+ if(e.pointerId===grab.id&&p){grab.x=clamp(p[0]+grab.ox,0,gw);grab.y=clamp(p[1]+grab.oy,0,gh);trail.push([e.timeStamp,grab.x,grab.y]);if(trail.length>12)trail.shift()}
 });
 // On release the toy keeps the speed your pointer had over the last ~0.1s (none if you'd already stopped).
 cv.addEventListener('pointerup',e=>{
@@ -409,7 +436,7 @@ let anim=null;
 const C=(...v)=>new THREE.Color(...v),mixC=(a,b,k)=>a.clone().lerp(b,k),
  SUN=[C(1,.96,.88),C(1.1,.64,.38),C(.16,.2,.3)],ZEN=[C(.2,.45,.85),C(.24,.28,.55),C(.012,.02,.05)],HOR=[C(.74,.85,.95),C(1,.64,.42),C(.035,.055,.09)];
 function setTime(v){
- T.value=v;const N=ss(.4,.95,v),K=Math.exp(-(((v-.5)/.17)**2)),el=(55-51*ss(0,.62,v))*Math.PI/180;
+ dirty=true;T.value=v;const N=ss(.4,.95,v),K=Math.exp(-(((v-.5)/.17)**2)),el=(55-51*ss(0,.62,v))*Math.PI/180;
  const pick=a=>mixC(mixC(a[0],a[1],K),a[2],N);
  U.N.value=N;U.sunCol.value.copy(pick(SUN));U.skyZ.value.copy(pick(ZEN));U.skyH.value.copy(pick(HOR));
  U.sunDir.value.set(-.6*Math.cos(el),Math.sin(el),-.8*Math.cos(el)).lerp(new THREE.Vector3(.45,.8,.4),N).normalize();
@@ -424,7 +451,7 @@ function setTime(v){
 const GFX=['Low','Medium','High','Max'];let toastT;
 function toast(m){hint.textContent=m;hint.style.opacity=1;clearTimeout(toastT);toastT=setTimeout(()=>hint.style.opacity=0,1500)}
 function setQuality(q,say){
- q=clamp(Math.round(q),0,3);GQ.value=q;GQ.setAttribute('aria-valuetext',GFX[q]);U.Qu.value=q;
+ dirty=true;q=clamp(Math.round(q),0,3);GQ.value=q;GQ.setAttribute('aria-valuetext',GFX[q]);U.Qu.value=q;
  const dpr=devicePixelRatio||1;R3.setPixelRatio(Math.min(dpr,[.6,1,1.5,2][q]));R3.setSize(cv.clientWidth,cv.clientHeight,false);
  const k=[3,2,1,1][q];if(water.userData.k!==k){water.geometry.dispose();water.geometry=waterGeo(k);water.userData.k=k}
  if(say)toast('Graphics: '+GFX[q]);
@@ -453,34 +480,53 @@ function place(dt){
   if(t.roll){const vx=t.vx*CELL,vz=-t.vy*CELL,s=Math.hypot(vx,vz);if(s>1e-4){qa.setFromAxisAngle(tv.set(vz,0,-vx).normalize(),s*dt/(8*CELL));t.q.premultiply(qa)}m.quaternion.copy(t.q)}
   else{qa.setFromUnitVectors(Y,t.n);qb.setFromAxisAngle(Y,t.a);m.quaternion.copy(qa).multiply(qb)}
  }
- selRing.visible=!!selT&&document.activeElement===cv;
- if(selRing.visible){const[x,z]=G2W(selT.x,selT.y);selRing.position.set(x,WY+.02,z);selRing.scale.setScalar(selT.R*CELL*1.05)}
+ const sv=!!selT&&document.activeElement===cv;if(sv!==selRing.visible)dirty=true;selRing.visible=sv;
+ if(sv){const[x,z]=G2W(selT.x,selT.y);selRing.position.set(x,WY+.02,z);selRing.scale.setScalar(selT.R*CELL*1.05)}
+ // redraw only if a toy moved by more than a micrometre
+ for(const t of toys){const m=t.mesh,p=m.position,q=m.quaternion,o=t.pv||(t.pv=[]),c=[p.x,p.y,p.z,q.x,q.y,q.z,q.w];
+  for(let k=0;k<7;k++)if(Math.abs(c[k]-(o[k]??1e9))>1e-6){dirty=true;t.pv=c;break}}
 }
 let acc=0,prev=performance.now();
+// Everything counts as resting when no toy is held, moving, bobbing or being pushed by a ring.
+const resting=()=>!grab&&toys.every(t=>Math.abs(t.vx)+Math.abs(t.vy)<.005&&Math.abs(t.w)<5e-4&&Math.abs(t.vz)<1e-3&&Math.abs(t.z)<2e-3&&Math.abs(t.hs||0)<1e-3)
+ &&!waves.some(ev=>ev.a*Math.exp(-.7*(simT-ev.t0))>=.02);
 function frame(now){
  const fdt=Math.min(now-prev,50)/1000;acc=Math.min(acc+now-prev,50);prev=now;
  if(anim){const k=Math.min((now-anim[3])/1500,1);anim[0](anim[1]+(anim[2]-anim[1])*k*k*(3-2*k));if(k===1)anim=null}
- while(acc>=DT*1000){phys();toys.forEach(stamp);step();simT+=DT;acc-=DT*1000}
- for(let y=0,i=0;y<gh;y++)for(let x=0;x<gw;x++,i++){
-  const l=A[x?i-1:i],r=A[x<gw-1?i+1:i],d=A[y?i-gw:i],u=A[y<gh-1?i+gw:i],j=i*4;
-  px[j]=128+A[i]*60;px[j+1]=128+(r-l)*150;px[j+2]=128+(u-d)*150;px[j+3]=128+(l+r+d+u-4*A[i])*200;
+ // once the water is flat and every toy is still, stop simulating until something is touched
+ const idle=waterFlat&&resting();
+ while(acc>=DT*1000){if(!idle){phys();toys.forEach(stamp);step();waterDirty=true}simT+=DT;acc-=DT*1000}
+ if(waterDirty){
+  let mx=0;
+  for(let y=0,i=0;y<gh;y++)for(let x=0;x<gw;x++,i++){
+   const l=A[x?i-1:i],r=A[x<gw-1?i+1:i],d=A[y?i-gw:i],u=A[y<gh-1?i+gw:i],j=i*4,a=A[i];
+   px[j]=128+a*60;px[j+1]=128+(r-l)*150;px[j+2]=128+(u-d)*150;px[j+3]=128+(l+r+d+u-4*a)*200;if(a>mx)mx=a;else if(-a>mx)mx=-a;
+  }
+  // below 0.0003 every value above rounds to the flat 128, so the water is visibly still: settle it exactly
+  if(mx<3e-4){A.fill(0);V.fill(0);waterFlat=true}else waterFlat=false;
+  wtex.needsUpdate=true;waterDirty=false;dirty=true;
  }
- wtex.needsUpdate=true;
- // toy footprints: alpha = shadow on the floor, red = how far to push the water down under the toy
- sx.clearRect(0,0,gw,gh);
- for(const t of toys){sx.save();sx.translate(t.x,t.y);sx.rotate(t.a);
-  sx.fillStyle='#000';sx.beginPath();t.sil(sx);sx.fill('evenodd');
-  sx.fillStyle=`rgb(${t.dip*255|0},0,0)`;sx.beginPath();(t.dipSil||t.sil)(sx);sx.fill('evenodd');sx.restore()}
- stex.needsUpdate=true;
+ // toy footprints (alpha = shadow on the floor, red = how far to push the water down under the toy); only when a toy moved
+ if(toys.some(t=>t.x!==t.fx||t.y!==t.fy||t.a!==t.fa)){
+  sx.clearRect(0,0,gw,gh);
+  for(const t of toys){t.fx=t.x;t.fy=t.y;t.fa=t.a;sx.save();sx.translate(t.x,t.y);sx.rotate(t.a);
+   sx.fillStyle='#000';sx.beginPath();t.sil(sx);sx.fill('evenodd');
+   sx.fillStyle=`rgb(${t.dip*255|0},0,0)`;sx.beginPath();(t.dipSil||t.sil)(sx);sx.fill('evenodd');sx.restore()}
+  stex.needsUpdate=true;dirty=true;
+ }
+ if(hoverEv){cast(hoverEv);cv.style.cursor=pickToy(onWater())?'grab':'';hoverEv=null}
  place(fdt);
- U.T.value=still.matches?0:now/2500;
- R3.render(scene,cam);
+ // the floor's light pattern animates on Medium and up, so those levels draw every frame; otherwise only on change
+ if(dirty||(U.Qu.value>0&&!still.matches)){U.T.value=still.matches?0:now/2500;R3.render(scene,cam);dirty=false}
  requestAnimationFrame(frame);
 }
 // start from the viewer's saved choice, else High on phones/tablets and Max elsewhere
 let saved=null;try{saved=localStorage.getItem('pool-graphics')}catch(e){}
 setQuality(saved!==null?+saved:matchMedia('(pointer:coarse)').matches?2:3);
-addEventListener('resize',resize);resize();requestAnimationFrame(frame);
+addEventListener('resize',resize);resize();
+// prepare every shader now (the selection ring's too), so nothing stutters the first time it appears
+selRing.visible=true;R3.compile(scene,cam);selRing.visible=false;
+requestAnimationFrame(frame);
 </script>
 </body>
 </html>
