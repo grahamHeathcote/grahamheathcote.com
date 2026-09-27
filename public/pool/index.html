@@ -248,10 +248,10 @@ function phys(){
 // ---------- 3D scene ----------
 const R3=new THREE.WebGLRenderer({canvas:cv,antialias:true,powerPreference:'high-performance',stencil:false});R3.setPixelRatio(Math.min(devicePixelRatio||1,2));
 R3.shadowMap.enabled=true;R3.shadowMap.type=THREE.PCFShadowMap;R3.shadowMap.autoUpdate=false;
-const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(40,1,.1,600);scene.fog=new THREE.Fog(0,45,170);
+const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(40,1,.1,600);scene.fog=new THREE.Fog(0,60,500);
 const wtex=new THREE.DataTexture(new Uint8Array(px.buffer),gw,gh,THREE.RGBAFormat);wtex.magFilter=wtex.minFilter=THREE.LinearFilter;
 const stex=new THREE.CanvasTexture(sc);stex.flipY=false;stex.generateMipmaps=false;stex.magFilter=stex.minFilter=THREE.LinearFilter;
-const U={SEG:{value:[0,1,2,3].map(()=>new THREE.Vector2(9,8))},FW:{value:0},FT:{value:0},Qu:{value:3},S:{value:wtex},Q:{value:stex},T:{value:0},N:{value:0},sunDir:{value:new THREE.Vector3(0,1,0)},sunCol:{value:new THREE.Color()},skyZ:{value:new THREE.Color()},skyH:{value:new THREE.Color()}};
+const U={OT:{value:0},SEG:{value:[0,1,2,3].map(()=>new THREE.Vector2(9,8))},FW:{value:0},FT:{value:0},Qu:{value:3},S:{value:wtex},Q:{value:stex},T:{value:0},N:{value:0},sunDir:{value:new THREE.Vector3(0,1,0)},sunCol:{value:new THREE.Color()},skyZ:{value:new THREE.Color()},skyH:{value:new THREE.Color()}};
 
 // Shared shading for the pool interior. Pool: x ∈ ±PL/2, z ∈ ±PW/2, floor slopes from DA (shallow) to DB (deep) below the deck.
 const POOL=`
@@ -334,7 +334,9 @@ function copingGeo(){
 const coping=mesh(copingGeo(),std('#d9d4c8',.85));
 
 // deck: flat pale concrete pavers with a hole for the pool
-const ds=new THREE.Shape([new THREE.Vector2(-160,-160),new THREE.Vector2(160,-160),new THREE.Vector2(160,160),new THREE.Vector2(-160,160)]),ex=PL/2+CW-.01,ez=PW/2+CW-.01;
+// the terrace: the sea lies beyond its far (−z) and left (−x) edges; lawn and villas beyond the other two
+const TX0=-8.5,TX1=12.5,TZ0=-7.5,TZ1=11,V2=(x,y)=>new THREE.Vector2(x,y);
+const ds=new THREE.Shape([V2(TX0,-TZ1),V2(TX1,-TZ1),V2(TX1,-TZ0),V2(TX0,-TZ0)]),ex=PL/2+CW-.01,ez=PW/2+CW-.01;
 ds.holes.push(new THREE.Path([new THREE.Vector2(-ex,-ez),new THREE.Vector2(-ex,ez),new THREE.Vector2(ex,ez),new THREE.Vector2(ex,-ez)]));
 const dg=new THREE.ShapeGeometry(ds);dg.rotateX(-Math.PI/2);
 const pav=canvasTex(256,256,g=>{g.fillStyle='#b9b4aa';g.fillRect(0,0,256,256);for(let i=0;i<2600;i++){g.fillStyle=`rgba(${Math.random()<.5?'255,255,255':'60,55,50'},${Math.random()*.07})`;g.fillRect(Math.random()*256,Math.random()*256,2,2)}
@@ -342,6 +344,10 @@ const pav=canvasTex(256,256,g=>{g.fillStyle='#b9b4aa';g.fillRect(0,0,256,256);fo
 pav.wrapS=pav.wrapT=THREE.RepeatWrapping;pav.repeat.set(1/.9,1/.9);pav.anisotropy=R3.capabilities.getMaxAnisotropy();
 // (Phong with no highlight = same flat matte look, but it shadows each light separately, so moon shadows stay faint)
 const deck=mesh(dg,new THREE.MeshPhongMaterial({map:pav,specular:0,shininess:0}));
+// below Max graphics the terrace and everything around it is swapped for the original plain deck running to the horizon
+const fs=new THREE.Shape([V2(-160,-160),V2(160,-160),V2(160,160),V2(-160,160)]);fs.holes.push(ds.holes[0]);
+const deckFar=mesh(new THREE.ShapeGeometry(fs).rotateX(-Math.PI/2),deck.material);deckFar.receiveShadow=true;
+const EXTRAS=new THREE.Group();   // the Max-only surroundings
 
 // sky dome (also what the water reflects), with stars at night
 const skyDome=mesh(new THREE.SphereGeometry(500,32,16),shade(VS,`varying vec3 vP;
@@ -353,12 +359,12 @@ water.renderOrder=1;walls.renderOrder=2;coping.renderOrder=3;deck.renderOrder=4;
 
 const sunL=new THREE.DirectionalLight(0xffffff,1),hemi=new THREE.HemisphereLight(0xffffff,0x777777,.6);
 const fillL=new THREE.DirectionalLight(0xffffff,0);
-sunL.castShadow=true;sunL.shadow.mapSize.set(1024,1024);sunL.shadow.bias=-.0006;sunL.target.position.set(2.3,0,-4.4);
-Object.assign(sunL.shadow.camera,{left:-4.5,right:4.5,top:4.5,bottom:-4.5,near:1,far:60});
+sunL.castShadow=true;sunL.shadow.mapSize.set(2048,2048);sunL.shadow.bias=-.0005;sunL.shadow.normalBias=.03;sunL.target.position.set(2,0,1.5);
+Object.assign(sunL.shadow.camera,{left:-15,right:15,top:15,bottom:-15,near:1,far:70});
 const selRing=mesh(new THREE.RingGeometry(.9,1,48),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.85,depthTest:false}));
 selRing.rotation.x=-Math.PI/2;selRing.visible=false;
-deck.receiveShadow=coping.receiveShadow=true;
-scene.add(skyDome,deck,coping,walls,water,sunL,sunL.target,fillL,hemi,selRing);
+deck.receiveShadow=coping.receiveShadow=true;EXTRAS.add(deck);
+scene.add(skyDome,EXTRAS,deckFar,coping,walls,water,sunL,sunL.target,fillL,hemi,selRing);
 // Merge a toy's parts that share a material into one mesh: identical triangles, far fewer draw calls
 // (the donut's 34 sprinkles become 5 draws, the chair's 15 parts become 3).
 function bake(root){
@@ -373,7 +379,7 @@ function bake(root){
    for(const q of geos){arr.set(q.attributes[n].array,o);o+=q.attributes[n].array.length}
    g.setAttribute(n,new THREE.BufferAttribute(arr,it));
   }
-  for(const q of geos){const ix=q.index.array;for(let k=0;k<ix.length;k++)idx.push(ix[k]+off);off+=q.attributes.position.count}
+  for(const q of geos){const c=q.attributes.position.count,ix=q.index?q.index.array:null;for(let k=0;k<(ix?ix.length:c);k++)idx.push((ix?ix[k]:k)+off);off+=c}
   g.setIndex(idx);out.add(new THREE.Mesh(g,mat));
  }
  root.traverse(o=>o.isMesh&&o.geometry.dispose());
@@ -436,6 +442,147 @@ void main(){vL=position.xz;vec4 w=modelMatrix*vec4(position,1.);vec2 u=vec2(w.x/
 void main(){float r=length(vL)/.34,a=atan(vL.y,vL.x),f=(1.-smoothstep(.2,1.,r))*(.55+.45*sin(a*7.+FT*5.+sin(r*14.-FT*8.)*1.8));
  gl_FragColor=vec4(vec3(.95,.99,1.)*(skyH*.35+sunCol*.6+N*.25),f*.45*FW);}`,{transparent:true,depthWrite:false}),HIT);
 scene.add(slideObj,sheet,stream,foam);
+
+// ---------- surroundings: a clifftop terrace over the sea, with villas, palms, loungers and parasols ----------
+// All simple shapes, merged per material; they cast shadows, but the shadow map is only redrawn when the sun moves.
+const scenery=new THREE.Group(),WIN=[],CASTERS=[];let CS=[];
+const white2=std('#f3f1ec',.75),wood=std('#a07650',.6),steel=std('#c7cdd1',.3),leafM=new THREE.MeshStandardMaterial({color:'#3f8a3a',roughness:.8,side:THREE.DoubleSide}),
+ trunkM=std('#8a6a4a',.95),nutM=std('#5a3f23',.7),cushM=std('#e8dfcf',.9),canopyM=new THREE.MeshStandardMaterial({color:'#f2e9d8',roughness:.85,side:THREE.DoubleSide}),
+ planterM=std('#ebe7df',.9),bushMs=['#3f7d36','#4b8c3f','#35702f'].map(c=>new THREE.MeshStandardMaterial({color:c,roughness:.9,flatShading:true})),
+ stripe=(a,b)=>{const t=canvasTex(64,8,g=>{g.fillStyle=b;g.fillRect(0,0,64,8);g.fillStyle=a;for(let x=0;x<64;x+=16)g.fillRect(x,0,8,8)});return new THREE.MeshStandardMaterial({map:t,roughness:.95})},
+ towelMs=[stripe('#ff7a59','#fff7ef'),stripe('#2aa6a0','#fff7ef')];
+const box=(w,h,d,m,x,y,z)=>mesh(new THREE.BoxGeometry(w,h,d),m,new THREE.Vector3(x,y,z));
+
+// sun loungers on the sea side, facing the pool (foot at z, backrest toward the sea), with parasols and side tables
+function lounger(x,z,towel){
+ scenery.add(box(.72,.26,2,white2,x,.13,z-1),box(.68,.08,1.3,cushM,x,.3,z-.65));
+ const b=box(.68,.08,.72,cushM,x,.3+Math.sin(.66)*.36,z-1.3-Math.cos(.66)*.36);b.rotation.x=.66;scenery.add(b);
+ if(towel)scenery.add(box(.5,.016,1.15,towel,x,.35,z-.62));
+}
+function parasol(x,z){
+ scenery.add(post(x,0,z,x,2.35,z,.025,wood),mesh(new THREE.ConeGeometry(1.25,.42,8,1,true),canopyM,new THREE.Vector3(x,2.28,z)),
+  post(x,.48,z,x,.52,z,.24,white2));
+ CASTERS.push({x,y:2.2,z,r:1.1});
+}
+lounger(-5.4,-4.45,towelMs[0]);lounger(-4.3,-4.45);lounger(-2.05,-4.45);lounger(-.95,-4.45,towelMs[1]);
+parasol(-4.85,-6.1);parasol(-1.5,-6.1);
+
+// glass balustrade along the two sea edges: stone kerb, glass, posts, a steel top rail
+const glassM=new THREE.MeshStandardMaterial({color:'#cfe8ee',transparent:true,opacity:.16,roughness:.05,depthWrite:false});
+for(const[x0,z0,x1,z1]of[[TX0,TZ0+.15,TX1,TZ0+.15],[TX0+.15,TZ0,TX0+.15,TZ1]]){
+ const L=Math.hypot(x1-x0,z1-z0),alongX=z0===z1,cx=(x0+x1)/2,cz=(z0+z1)/2;
+ scenery.add(box(alongX?L:.34,.07,alongX?.34:L,std('#d9d4c8',.85),cx,.035,cz));
+ const gl=box(alongX?L:.02,.95,alongX?.02:L,glassM,cx,.6,cz);gl.userData.noShadow=1;scenery.add(gl);
+ scenery.add(post(x0,1.08,z0,x1,1.08,z1,.03,steel));
+ for(let t=0;t<=L+.01;t+=L/Math.round(L/1.9))scenery.add(post(x0+(x1-x0)*t/L,.07,z0+(z1-z0)*t/L,x0+(x1-x0)*t/L,1.08,z0+(z1-z0)*t/L,.025,steel));
+}
+
+// planters with round shrubs
+function planter(x,z,alongZ){
+ scenery.add(box(alongZ?.46:1.2,.46,alongZ?1.2:.46,planterM,x,.23,z));
+ for(let k=-1;k<=1;k++)scenery.add(mesh(new THREE.IcosahedronGeometry(.3+.06*((k+2)%2),1),bushMs[(k+3)%3],new THREE.Vector3(x+(alongZ?0:k*.36),.58+.05*k*k,z+(alongZ?k*.36:0))));
+}
+planter(-7.85,-2.6,1);planter(-7.85,1.2,1);planter(-7.85,7.4,1);planter(7.3,-7,0);planter(10.4,-7,0);
+
+// palms: a ringed, leaning trunk and a crown of drooping, folded fronds
+function frond(L){
+ const n=10,pos=[],idx=[];
+ for(let i=0;i<=n;i++){const s=i/n,x=s*L*.95,y=L*(.35*s-.75*s*s),w=.28*Math.pow(Math.sin(Math.PI*Math.pow(s,.8)),.9),f=w*.35;
+  pos.push(x,y-f,-w,x,y+.04,0,x,y-f,w)}
+ for(let i=0;i<n;i++){const a=i*3;idx.push(a,a+1,a+3,a+1,a+4,a+3,a+1,a+2,a+4,a+2,a+5,a+4)}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.computeVertexNormals();return g;
+}
+const nutG=new THREE.SphereGeometry(.09,8,6);
+function palm(x,z,h,lx,lz){
+ const n=7,p=[];for(let i=0;i<=n;i++){const t=i/n;p.push(new THREE.Vector3(x+lx*t*t,h*t,z+lz*t*t))}
+ for(let i=0;i<n;i++){const d=p[i+1].clone().sub(p[i]),c=mesh(new THREE.CylinderGeometry(.2-.08*(i+1)/n,(.2-.08*i/n)*1.1,d.length()*1.02,9),trunkM,p[i].clone().add(p[i+1]).multiplyScalar(.5));
+  c.quaternion.setFromUnitVectors(Y,d.normalize());scenery.add(c)}
+ const top=p[n];
+ for(let k=0;k<9;k++){const f=mesh(frond(2.1+.4*Math.sin(k*2.3+z)),leafM,top);f.rotation.y=k/9*Math.PI*2+x;f.rotation.z=.1*Math.sin(k*1.7);scenery.add(f)}
+ for(let k=0;k<3;k++){const a=k*2.1+x;scenery.add(mesh(nutG,nutM,top.clone().add(new THREE.Vector3(Math.cos(a)*.18,-.2,Math.sin(a)*.18))))}
+ CASTERS.push({x:top.x,y:top.y,z:top.z,r:1.9,palm:x});
+}
+palm(-7.7,-6.7,6.2,-1.3,-1);palm(-7.6,4.8,5.4,-.7,.2);palm(-7.2,9.9,6.6,-.3,.6);palm(11.6,-6.6,5.8,.8,-.9);palm(12,9.6,6.3,.5,.4);
+
+const sceneryObj=bake(scenery);
+sceneryObj.traverse(o=>{if(o.isMesh&&o.material!==glassM){o.castShadow=true;o.receiveShadow=true}});
+
+// two white villas on the land sides; their windows glow at night
+function facade(w,h){
+ const map=canvasTex(256,256,g=>{g.fillStyle='#f2efe9';g.fillRect(0,0,256,256);for(const[x,y]of[[0,0],[128,0],[0,128],[128,128]]){
+   const gr=g.createLinearGradient(0,y+22,0,y+104);gr.addColorStop(0,'#6d8ea5');gr.addColorStop(1,'#223846');g.fillStyle=gr;g.fillRect(x+18,y+22,92,82);
+   g.fillStyle='#e9e5de';g.fillRect(x+62,y+22,4,82);g.fillRect(x+14,y+104,100,6)}}),
+  em=canvasTex(256,256,g=>{g.fillStyle='#000';g.fillRect(0,0,256,256);for(const[x,y,on]of[[0,0,1],[128,0,0],[0,128,1],[128,128,1]])if(on){g.fillStyle='#ffc877';g.fillRect(x+18,y+22,92,82);g.fillStyle='#000';g.fillRect(x+62,y+22,4,82)}});
+ for(const t of[map,em]){t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(w/4.8,h/6.8)}
+ const m=new THREE.MeshStandardMaterial({map,emissiveMap:em,emissive:0xffffff,emissiveIntensity:0,roughness:.7});WIN.push(m);return m;
+}
+function villa(x0,x1,z0,z1,h){   // facades on the sides facing the pool (−z) and the sea (−x)
+ const w=x1-x0,d=z1-z0,plain=std('#f2efe9',.8),v=mesh(new THREE.BoxGeometry(w,h,d),[plain,facade(d,h),plain,plain,plain,facade(w,h)],new THREE.Vector3((x0+x1)/2,h/2,(z0+z1)/2));
+ v.castShadow=v.receiveShadow=true;EXTRAS.add(v,box(w+.25,.3,d+.25,plain,(x0+x1)/2,h+.15,(z0+z1)/2));
+}
+villa(-8.5,-2.5,11.5,17.5,6.8);villa(13,21,3,15,6.8);
+
+// the land beyond the terrace (lawn over a rock cliff) and the sea 22 m below
+const lawnS=new THREE.Shape([V2(TX0,-TZ0-220),V2(TX0+220,-TZ0-220),V2(TX0+220,-TZ0),V2(TX0,-TZ0)]);   // with a hole where the terrace is
+lawnS.holes.push(new THREE.Path([V2(TX0,-TZ1),V2(TX0,-TZ0),V2(TX1,-TZ0),V2(TX1,-TZ1)]));
+const lawn=mesh(new THREE.ShapeGeometry(lawnS).rotateX(-Math.PI/2),new THREE.MeshPhongMaterial({color:'#6e8f4f',specular:0,shininess:0}),new THREE.Vector3(0,-.03,0));
+lawn.receiveShadow=true;
+const rock=std('#8b7d6b',1),cliff=new THREE.Group();   // just the two rock faces dropping to the sea
+cliff.add(mesh(new THREE.PlaneGeometry(220,22).rotateY(Math.PI),rock,new THREE.Vector3(TX0+110,-11,TZ0)),mesh(new THREE.PlaneGeometry(220,22).rotateY(-Math.PI/2),rock,new THREE.Vector3(TX0,-11,TZ0+110)));
+const sea=mesh(new THREE.PlaneGeometry(4000,4000).rotateX(-Math.PI/2),shade(VS,`varying vec3 vP;uniform float OT;
+void main(){
+ vec2 p=vP.xz;float d=length(p-cameraPosition.xz);vec2 g=vec2(0.);
+ g+=vec2(.8,.6)*cos(dot(p,vec2(.8,.6))*.9+OT*1.3)*.09;g+=vec2(-.4,.9)*cos(dot(p,vec2(-.4,.9))*1.7+OT*1.9)*.05;
+ g+=vec2(.95,-.3)*cos(dot(p,vec2(.95,-.3))*3.1+OT*2.6)*.03;g+=vec2(.2,1.)*cos(dot(p,vec2(.2,1.))*.37+OT*.8)*.08;
+ g/=1.+d*.02;   // calmer with distance, so it doesn't shimmer
+ vec3 n=normalize(vec3(-g.x,1.,-g.y)),v=normalize(vP-cameraPosition),r=reflect(v,n);r.y=abs(r.y);
+ float F=.02+.98*pow(1.-max(dot(-v,n),0.),5.);
+ vec3 c=mix(vec3(.03,.16,.26)*(skyZ*.6+sunCol*.4+.15),sky(r),F)+sunCol*pow(max(dot(r,sunDir),0.),300.)*3.*(1.-N*.8);
+ gl_FragColor=vec4(mix(c,skyH,smoothstep(80.,550.,d)),1.);}`),new THREE.Vector3(0,-22,0));
+sea.renderOrder=4;
+// a far headland continuing the coast, two islands, and a sailboat
+const hazeM=shade(VS,`varying vec3 vP;void main(){float h=clamp((vP.y+22.)/45.,0.,1.);
+ vec3 land=mix(vec3(.17,.23,.19),vec3(.3,.35,.27),h)*(skyZ*.5+sunCol*.6+.1);gl_FragColor=vec4(mix(land,skyH,.6-.2*h),1.);}`,{side:THREE.DoubleSide});
+function ridge(a0,a1,R,H,seed){
+ const n=40,pos=[],idx=[];
+ const hAt=t=>H*ss(0,.3,t)*ss(1,.7,t)*(.88+.08*Math.sin(t*9+seed)+.04*Math.sin(t*23+seed*2)),rAt=t=>R*(1+.03*Math.sin(t*5+seed));
+ for(let i=0;i<=n;i++){const t=i/n,a=(a0+(a1-a0)*t)*Math.PI/180,h=hAt(t),r=rAt(t);
+  pos.push(Math.cos(a)*r,-23,Math.sin(a)*r,Math.cos(a)*r,-22+h,Math.sin(a)*r)}
+ for(let i=0;i<n;i++){const k=i*2;idx.push(k,k+2,k+1,k+1,k+2,k+3)}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);
+ const m=mesh(g,hazeM);   // top(t): a point on the island's top edge, a little toward the viewer, for lights
+ m.userData.top=t=>{const a=(a0+(a1-a0)*t)*Math.PI/180,r=rAt(t)-2;return new THREE.Vector3(Math.cos(a)*r,-22+hAt(t)+1,Math.sin(a)*r)};return m;
+}
+const boat=new THREE.Group(),sail=new THREE.Shape([V2(0,0),V2(4.5,0),V2(0,9)]);
+boat.add(box(7,1.1,2.2,std('#ffffff',.6),0,.3,0),mesh(new THREE.ShapeGeometry(sail),new THREE.MeshStandardMaterial({color:'#fbfaf6',side:THREE.DoubleSide}),new THREE.Vector3(-1.5,1,0)));
+boat.position.set(-62,-22,-258);boat.rotation.y=.5;
+const headland=ridge(-72,-38,330,17,1),isle1=ridge(-148,-130,420,9,4),isle2=ridge(158,178,480,10,7);
+EXTRAS.add(sceneryObj,lawn,cliff,sea,headland,isle1,isle2,boat);
+
+// ---------- night lamps: bollards by the loungers, and lights on the islands. They're glowing shapes, not real
+// lights, so they cost almost nothing: a lit head, a soft halo, and a warm pool of light on the deck. ----------
+const GLOWS=[],glowTex=canvasTex(64,64,g=>{const r=g.createRadialGradient(32,32,0,32,32,32);r.addColorStop(0,'#fff');r.addColorStop(.25,'rgba(255,255,255,.55)');r.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=r;g.fillRect(0,0,64,64)});
+function glow(pos,size,color,k,pulse){   // k = brightness at full night; pulse = a lighthouse-style slow flash
+ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false,fog:false,opacity:0}));
+ s.position.copy(pos);s.scale.setScalar(size);s.userData={k,pulse};s.visible=false;GLOWS.push(s);EXTRAS.add(s);return s;
+}
+const lampHead=new THREE.MeshStandardMaterial({color:'#fff3d6',emissive:0xffc877,emissiveIntensity:0,roughness:.4}),lampPost=std('#3a3f44',.5);WIN.push(lampHead);
+const poolM=new THREE.MeshBasicMaterial({map:glowTex,color:'#ffcf8a',blending:THREE.AdditiveBlending,transparent:true,depthWrite:false,opacity:0});
+const lampParts=new THREE.Group();
+for(const x of[-6.3,-3.2,-.05]){const z=-6.95;
+ lampParts.add(post(x,0,z,x,.8,z,.05,lampPost),post(x,.8,z,x,.97,z,.075,lampHead),post(x,.97,z,x,1,z,.09,lampPost));
+ glow(new THREE.Vector3(x,.9,z),.9,'#ffd08a',.9);
+ const p=mesh(new THREE.CircleGeometry(1.7,32).rotateX(-Math.PI/2),poolM,new THREE.Vector3(x,.012,z));p.renderOrder=6;EXTRAS.add(p);
+}
+const lampObj=bake(lampParts);lampObj.traverse(o=>{if(o.isMesh)o.castShadow=true});EXTRAS.add(lampObj);
+// island lights: a few warm windows along each island, and a lighthouse on the end of the near one
+for(const[isle,ts]of[[headland,[.22,.27,.34,.41,.47,.58,.66]],[isle1,[.3,.4,.52,.6]],[isle2,[.35,.42,.5,.58,.66,.72]]])for(const t of ts)glow(isle.userData.top(t),6.5,'#ffd89a',1);
+const lt=headland.userData.top(.1),tower=mesh(new THREE.CylinderGeometry(1.2,1.8,11,10),hazeM,lt.clone().add(new THREE.Vector3(0,5,0)));EXTRAS.add(tower);
+const beacon=glow(lt.clone().add(new THREE.Vector3(0,11,0)),26,'#fff2cc',1,true);
+glow(new THREE.Vector3(-62,-13.5,-258),2.5,'#fff0c0',.8);   // the sailboat's mast light
+let nightN=0;
+function casterShadows(){slideShadow();const d=U.sunDir.value;CS=(EXTRAS.visible?CASTERS:[]).map(c=>{const k=(c.y-WY)/Math.max(d.y,.05);return[...W2G(c.x-d.x*k,c.z-d.z*k),c.r/CELL,c.palm]})}
+
 
 // the stream's effect on the water: an uneven push at the landing spot (it averages to zero, so the pool level
 // never drifts) which sends out small ripples, plus a gentle ring every 0.3 s so nearby toys drift away
@@ -531,7 +678,10 @@ function setTime(v){
  const pick=a=>mixC(mixC(a[0],a[1],K),a[2],N);
  U.N.value=N;U.sunCol.value.copy(pick(SUN));U.skyZ.value.copy(pick(ZEN));U.skyH.value.copy(pick(HOR));
  U.sunDir.value.set(-.6*Math.cos(el),Math.sin(el),-.8*Math.cos(el)).lerp(new THREE.Vector3(.45,.8,.4),N).normalize();
- sunL.position.copy(sunL.target.position).addScaledVector(U.sunDir.value,25);R3.shadowMap.needsUpdate=true;slideShadow();footDirty=true;sunL.color.copy(U.sunCol.value);sunL.intensity=.85*(1-.7*N);fillL.color.copy(U.sunCol.value);fillL.intensity=.85*.7*N;fillL.position.copy(U.sunDir.value);
+ sunL.position.copy(sunL.target.position).addScaledVector(U.sunDir.value,30);R3.shadowMap.needsUpdate=true;casterShadows();footDirty=true;
+ for(const m of WIN)m.emissiveIntensity=N*1.3;   // villa windows and lamp heads light up at night
+ nightN=N;for(const s of GLOWS){s.visible=N>.02;s.material.opacity=N*s.userData.k}poolM.opacity=N*.5;
+sunL.color.copy(U.sunCol.value);sunL.intensity=.85*(1-.7*N);fillL.color.copy(U.sunCol.value);fillL.intensity=.85*.7*N;fillL.position.copy(U.sunDir.value);
  hemi.color.copy(U.skyZ.value).lerp(C(1,1,1),.55*(1-N));hemi.groundColor.copy(mixC(C(.55,.53,.5),C(.1,.42,.48),N));hemi.intensity=.42+.5*N;
  scene.fog.color.copy(U.skyH.value);
  const r=document.documentElement.style,hx='#'+U.skyH.value.getHexString();
@@ -545,6 +695,9 @@ function setQuality(q,say){
  dirty=true;q=clamp(Math.round(q),0,3);GQ.value=q;GQ.setAttribute('aria-valuetext',GFX[q]);U.Qu.value=q;
  const dpr=devicePixelRatio||1;R3.setPixelRatio(Math.min(dpr,[.6,1,1.5,2][q]));R3.setSize(cv.clientWidth,cv.clientHeight,false);
  const k=[3,2,1,1][q];if(water.userData.k!==k){water.geometry.dispose();water.geometry=waterGeo(k);water.userData.k=k}
+ // Max shows the clifftop terrace and everything around it; lower levels use the plain deck and lighter fog
+ const full=q===3;if(EXTRAS.visible!==full||deckFar.visible===full){EXTRAS.visible=full;deckFar.visible=!full;
+  scene.fog.near=full?60:45;scene.fog.far=full?500:170;R3.shadowMap.needsUpdate=true;casterShadows();footDirty=true}
  if(say)toast('Graphics: '+GFX[q]);
  try{localStorage.setItem('pool-graphics',q)}catch(e){}
 }
@@ -602,6 +755,9 @@ function frame(now){
  // (alpha = shadow, blue = a toy is here, red = push the water down); the slide's shadow is alpha only
  if(footDirty||toys.some(t=>t.x!==t.fx||t.y!==t.fy||t.a!==t.fa)){
   footDirty=false;sx.clearRect(0,0,gw,gh);
+  for(const[x,y,r,palm]of CS){
+   if(palm===undefined){sx.fillStyle='#000';sx.beginPath();for(let k=0;k<8;k++)sx.lineTo(x+r*Math.cos(k*.785),y+r*Math.sin(k*.785));sx.fill()}
+   else{sx.strokeStyle='rgba(0,0,0,.75)';sx.lineWidth=.45/CELL;sx.lineCap='round';for(let k=0;k<9;k++){const a=k/9*6.283+palm;sx.beginPath();sx.moveTo(x,y);sx.lineTo(x+r*Math.cos(a),y+r*Math.sin(a));sx.stroke()}}}
   if(SLS){sx.strokeStyle='#000';sx.lineWidth=(2*SLR+.07)/CELL;sx.lineCap=sx.lineJoin='round';sx.beginPath();SLS.forEach(([x,y],i)=>i?sx.lineTo(x,y):sx.moveTo(x,y));sx.stroke()}
   for(const t of toys){t.fx=t.x;t.fy=t.y;t.fa=t.a;sx.save();sx.translate(t.x,t.y);sx.rotate(t.a);
    sx.fillStyle='#00f';sx.beginPath();t.sil(sx);sx.fill('evenodd');
@@ -611,7 +767,7 @@ function frame(now){
  if(hoverEv){cast(hoverEv);const pk=pickToy(onWater());cv.style.cursor=onSlide(pk)?'pointer':pk?'grab':'';hoverEv=null}
  place(fdt);
  // the floor's light pattern animates on Medium and up, so those levels draw every frame; otherwise only on change
- if(dirty||((U.Qu.value>0||segs.length)&&!still.matches)){U.T.value=still.matches?0:now/2500;U.FT.value=still.matches?0:now/1000;R3.render(scene,cam);dirty=false}
+ if(dirty||((U.Qu.value>0||segs.length)&&!still.matches)){if(beacon.visible)beacon.material.opacity=nightN*(still.matches?.8:.35+.65*Math.pow(.5+.5*Math.sin(now/700),3));U.T.value=still.matches?0:now/2500;U.FT.value=still.matches?0:now/1000;if(U.Qu.value>0&&!still.matches)U.OT.value=now/1000;R3.render(scene,cam);dirty=false}
  requestAnimationFrame(frame);
 }
 // start from the viewer's saved choice, else High on phones/tablets and Max elsewhere
