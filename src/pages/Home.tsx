@@ -33,7 +33,7 @@ export default function Home() {
           to="/projects"
           className="rounded-lg bg-[#e7c9b8] px-4 py-2 text-sm font-medium text-[#3d2b23] transition-colors hover:bg-[#dfb9a3]"
         >
-          See projects
+          See featured projects
         </Link>
         {pdfs.map((pdf) => (
           <a

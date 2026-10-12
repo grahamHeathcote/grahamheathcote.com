@@ -12,7 +12,7 @@ export default function Projects() {
     <div className="space-y-10">
       <div className="space-y-3">
         <h1 className="text-3xl font-semibold tracking-tight text-[#3d2b23]">
-          Projects
+          Featured Projects
         </h1>
         <p className="max-w-prose text-[#6b5d4f]">
           A selection of personal projects. More are available on{" "}
