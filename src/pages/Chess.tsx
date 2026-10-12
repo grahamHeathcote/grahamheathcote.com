@@ -2,6 +2,7 @@ import { Chessboard } from "react-chessboard";
 import { Chess, type Square } from "chess.js";
 import { useState, useRef } from "react";
 import axios from "axios";
+import { track } from "../lib/track";
 
 function statusText(fen: string, loading: boolean, error: boolean) {
   const game = new Chess(fen);
@@ -54,6 +55,8 @@ function ChessGame() {
         promotion: "q",
       });
       setFen(game.fen());
+      if (game.history().length === 1) track("chess-game-started");
+      track("chess-move-played");
       if (!game.isGameOver()) engineMove();
       return true;
     } catch {

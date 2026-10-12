@@ -39,6 +39,7 @@ export default function Home() {
           <a
             key={pdf.id}
             href={pdf.file}
+            data-umami-event={`${pdf.id}-download`}
             target="_blank"
             rel="noreferrer"
             className="rounded-lg border border-[#e4d9c8] px-4 py-2 text-sm font-medium text-[#6b5d4f] transition-colors hover:border-[#c9b8a0] hover:text-[#3d2b23]"
