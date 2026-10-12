@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans:
+    "Figtree", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji";
+}
+
 html {
   color-scheme: light;
   scroll-behavior: smooth;
