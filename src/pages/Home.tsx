@@ -47,26 +47,6 @@ export default function Home() {
           </a>
         ))}
       </div>
-
-      <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-[#e4d9c8] pt-8 text-sm">
-        <a
-          href={`mailto:${site.email}`}
-          className="text-[#8a7c6d] underline-offset-4 transition-colors hover:text-[#3d2b23] hover:underline"
-        >
-          {site.email}
-        </a>
-        {site.links.map((link) => (
-          <a
-            key={link.label}
-            href={link.href}
-            target="_blank"
-            rel="noreferrer"
-            className="text-[#8a7c6d] underline-offset-4 transition-colors hover:text-[#3d2b23] hover:underline"
-          >
-            {link.label}
-          </a>
-        ))}
-      </div>
     </div>
   );
 }

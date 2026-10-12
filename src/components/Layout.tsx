@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
+import { site } from "../data/site";
 
 const navItems = [
   { to: "/", label: "Home", end: true },
@@ -35,9 +36,31 @@ export default function Layout() {
         </nav>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-16">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-6 pt-16 pb-12">
         <Outlet />
       </main>
+
+      <footer className="mx-auto w-full max-w-5xl px-6 pb-16">
+        <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-[#e4d9c8] pt-8 text-sm">
+          <a
+            href={`mailto:${site.email}`}
+            className="text-[#8a7c6d] underline-offset-4 transition-colors hover:text-[#3d2b23] hover:underline"
+          >
+            {site.email}
+          </a>
+          {site.links.map((link) => (
+            <a
+              key={link.label}
+              href={link.href}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[#8a7c6d] underline-offset-4 transition-colors hover:text-[#3d2b23] hover:underline"
+            >
+              {link.label}
+            </a>
+          ))}
+        </div>
+      </footer>
     </div>
   );
 }
