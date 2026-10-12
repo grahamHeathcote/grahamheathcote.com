@@ -96,14 +96,14 @@ function ChessGame() {
         </p>
       </div>
 
-      <div className="max-w-md rounded-xl border border-[#e4d9c8] bg-white/40 p-4 backdrop-blur-sm">
+      <div className="max-w-md rounded-sm border border-[#e4d9c8] bg-white/40 p-4 backdrop-blur-sm">
         <Chessboard
           options={{
             position: fen,
             onPieceDrop,
             darkSquareStyle: { backgroundColor: "#b58863" },
             lightSquareStyle: { backgroundColor: "#f0d9b5" },
-            boardStyle: { borderRadius: "8px", overflow: "hidden" },
+            boardStyle: { borderRadius: "2px", overflow: "hidden" },
           }}
         />
         <div className="mt-4 flex items-center justify-between gap-4">
@@ -114,7 +114,7 @@ function ChessGame() {
             type="button"
             onClick={newGame}
             disabled={loading}
-            className="shrink-0 rounded-lg bg-[#e7c9b8] px-3 py-1.5 text-sm font-medium text-[#3d2b23] transition-colors hover:bg-[#dfb9a3] disabled:opacity-50"
+            className="shrink-0 rounded-sm bg-[#e7c9b8] px-3 py-1.5 text-sm font-medium text-[#3d2b23] transition-colors hover:bg-[#dfb9a3] disabled:opacity-50"
           >
             New game
           </button>

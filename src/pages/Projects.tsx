@@ -5,7 +5,7 @@ import { site } from "../data/site";
 const github = site.links.find((link) => link.label === "GitHub");
 
 const buttonClass =
-  "rounded-lg bg-[#e7c9b8] px-3 py-1.5 text-sm font-medium text-[#3d2b23] transition-colors hover:bg-[#dfb9a3]";
+  "rounded-sm bg-[#e7c9b8] px-3 py-1.5 text-sm font-medium text-[#3d2b23] transition-colors hover:bg-[#dfb9a3]";
 
 export default function Projects() {
   return (
@@ -31,7 +31,7 @@ export default function Projects() {
       <ul className="space-y-4">
         {projects.map((project) => (
           <li key={project.title}>
-            <div className="relative rounded-xl border border-[#e4d9c8] bg-white/40 p-5 backdrop-blur-sm transition-colors hover:border-[#c9b8a0] hover:bg-white/70">
+            <div className="relative rounded-sm border border-[#e4d9c8] bg-white/40 p-5 backdrop-blur-sm transition-colors hover:border-[#c9b8a0] hover:bg-white/70">
               <div className="flex items-baseline justify-between gap-4">
                 <h2 className="font-medium text-[#3d2b23]">
                   {project.href ? (
@@ -61,7 +61,7 @@ export default function Projects() {
                   {project.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="rounded-full border border-[#e4d9c8] px-2.5 py-0.5 text-xs text-[#8a7c6d]"
+                      className="rounded-sm border border-[#e4d9c8] px-2.5 py-0.5 text-xs text-[#8a7c6d]"
                     >
                       {tag}
                     </span>

@@ -9,7 +9,7 @@ const navItems = [
 
 function navClass({ isActive }: { isActive: boolean }) {
   return [
-    "rounded-md px-3 py-1.5 text-sm transition-colors",
+    "rounded-sm px-3 py-1.5 text-sm transition-colors",
     isActive
       ? "bg-[#e7c9b8] text-[#3d2b23]"
       : "text-[#8a7c6d] hover:text-[#3d2b23] hover:bg-[#ece3d6]",

@@ -31,7 +31,7 @@ export default function Home() {
       <div className="flex flex-wrap items-center gap-3">
         <Link
           to="/projects"
-          className="rounded-lg bg-[#e7c9b8] px-4 py-2 text-sm font-medium text-[#3d2b23] transition-colors hover:bg-[#dfb9a3]"
+          className="rounded-sm bg-[#e7c9b8] px-4 py-2 text-sm font-medium text-[#3d2b23] transition-colors hover:bg-[#dfb9a3]"
         >
           See featured projects
         </Link>
@@ -42,7 +42,7 @@ export default function Home() {
             data-umami-event={`${pdf.id}-download`}
             target="_blank"
             rel="noreferrer"
-            className="rounded-lg border border-[#e4d9c8] px-4 py-2 text-sm font-medium text-[#6b5d4f] transition-colors hover:border-[#c9b8a0] hover:text-[#3d2b23]"
+            className="rounded-sm border border-[#e4d9c8] px-4 py-2 text-sm font-medium text-[#6b5d4f] transition-colors hover:border-[#c9b8a0] hover:text-[#3d2b23]"
           >
             Read my {pdf.title.toLowerCase()}
           </a>
