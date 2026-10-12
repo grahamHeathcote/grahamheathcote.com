@@ -5,7 +5,7 @@ export const site = {
     "Computer Science graduate from the University of St Andrews, Scotland, UK",
   intro:
     "I studied Computer Science at the University of St Andrews and now live in " +
-    "Minneapolis. Most of my experience is in web development (from freelance work) and DevOps (from past internships).",
+    "Minneapolis. Most of my experience is in web development (freelance), embedded systems, and DevOps (internships).",
   email: "grahamkheathcote@gmail.com",
   links: [
     { label: "GitHub", href: "https://github.com/grahamHeathcote" },
