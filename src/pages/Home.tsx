@@ -5,14 +5,28 @@ import { pdfs } from "../data/pdfs";
 export default function Home() {
   return (
     <div className="space-y-10">
-      <div className="space-y-4">
-        <h1 className="text-4xl font-semibold tracking-tight text-[#3d2b23] sm:text-5xl">
-          {site.name}
-        </h1>
-        <p className="text-lg text-[#8a7c6d]">{site.tagline}</p>
-      </div>
+      <div className="flex flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-6">
+          <div className="space-y-4">
+            <h1 className="text-4xl font-semibold tracking-tight text-[#3d2b23] sm:text-5xl">
+              {site.name}
+            </h1>
+            <p className="text-lg text-[#8a7c6d]">{site.tagline}</p>
+          </div>
 
-      <p className="max-w-prose leading-relaxed text-[#6b5d4f]">{site.intro}</p>
+          <p className="max-w-prose leading-relaxed text-[#6b5d4f]">
+            {site.intro}
+          </p>
+        </div>
+
+        <img
+          src="/istanbul_edit.jpg"
+          alt="Graham Heathcote in Istanbul, with the Galata Tower behind"
+          width={830}
+          height={1037}
+          className="w-full max-w-[22rem] shrink-0 rounded-xl border border-[#e4d9c8] object-cover"
+        />
+      </div>
 
       <div className="flex flex-wrap items-center gap-3">
         <Link

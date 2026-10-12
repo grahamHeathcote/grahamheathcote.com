@@ -19,7 +19,7 @@ export default function Layout() {
   return (
     <div className="flex min-h-screen flex-col bg-[#f6f1e9] text-[#3d2b23]">
       <header className="sticky top-0 z-10 border-b border-[#e4d9c8] bg-[#f6f1e9]">
-        <nav className="mx-auto flex max-w-3xl items-center justify-end gap-4 px-6 py-4">
+        <nav className="mx-auto flex max-w-5xl items-center justify-end gap-4 px-6 py-4">
           <div className="flex items-center gap-1">
             {navItems.map((item) => (
               <NavLink
@@ -35,7 +35,7 @@ export default function Layout() {
         </nav>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-16">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-16">
         <Outlet />
       </main>
     </div>
