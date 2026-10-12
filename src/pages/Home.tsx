@@ -1,34 +1,58 @@
 import { Link } from "react-router-dom";
+import { site } from "../data/site";
+import { pdfs } from "../data/pdfs";
 
-function Home() {
+export default function Home() {
   return (
-    <div className="p-4">
-      <h1 className="text-xl font-semibold mb-2">Graham Heathcote</h1>
-      <h2>Welcome to my (soon to be improved) website.</h2>
-      In the meantime, play my 
-      <Link className="mt-2 text-blue-500 hover:underline" to="/chess">
-        {" "}
-        chess engine, {" "}
-      </Link>
-      read my {" "}
-      <a
-        className="mt-2 text-blue-500 hover:underline"
-        href="/pdf/undergraduate_dissertation.pdf"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        dissertation,{" "}
-      </a>
-      or visit my
-      <Link
-        className="mt-2 text-blue-500 hover:underline"
-        to="https://github.com/grahamHeathcote"
-      >
-        {" "}
-        GitHub page.
-      </Link>
+    <div className="space-y-10">
+      <div className="space-y-4">
+        <h1 className="text-4xl font-semibold tracking-tight text-[#3d2b23] sm:text-5xl">
+          {site.name}
+        </h1>
+        <p className="text-lg text-[#8a7c6d]">{site.tagline}</p>
+      </div>
+
+      <p className="max-w-prose leading-relaxed text-[#6b5d4f]">{site.intro}</p>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Link
+          to="/projects"
+          className="rounded-lg bg-[#e7c9b8] px-4 py-2 text-sm font-medium text-[#3d2b23] transition-colors hover:bg-[#dfb9a3]"
+        >
+          See projects
+        </Link>
+        {pdfs.map((pdf) => (
+          <a
+            key={pdf.id}
+            href={pdf.file}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg border border-[#e4d9c8] px-4 py-2 text-sm font-medium text-[#6b5d4f] transition-colors hover:border-[#c9b8a0] hover:text-[#3d2b23]"
+          >
+            Read my {pdf.title.toLowerCase()}
+          </a>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-[#e4d9c8] pt-8 text-sm">
+        <a
+          href={`mailto:${site.email}`}
+          className="text-[#8a7c6d] underline-offset-4 transition-colors hover:text-[#3d2b23] hover:underline"
+        >
+          {site.email}
+        </a>
+        {site.links.map((link) => (
+          <a
+            key={link.label}
+            href={link.href}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[#8a7c6d] underline-offset-4 transition-colors hover:text-[#3d2b23] hover:underline"
+          >
+            {link.label}
+          </a>
+        ))}
+      </div>
     </div>
   );
 }
-
-export default Home;

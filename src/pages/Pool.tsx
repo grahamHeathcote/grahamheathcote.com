@@ -1,4 +1,4 @@
-export default function Car() {
-  window.location.replace('/pool/index.html')
-  return null
+export default function Pool() {
+  window.location.replace("/pool/index.html");
+  return null;
 }

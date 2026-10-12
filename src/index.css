@@ -1,1 +1,11 @@
 @import "tailwindcss";
+
+html {
+  color-scheme: light;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #f6f1e9;
+  -webkit-font-smoothing: antialiased;
+}
