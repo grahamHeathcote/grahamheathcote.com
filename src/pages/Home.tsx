@@ -20,7 +20,7 @@ export default function Home() {
         </div>
 
         <img
-          src="/istanbul_edit.jpg"
+          src="/images/graham-istanbul.jpg"
           alt="Graham Heathcote in Istanbul, with the Galata Tower behind"
           width={830}
           height={1037}
