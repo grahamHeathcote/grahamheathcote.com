@@ -17,6 +17,8 @@ function statusText(fen: string, loading: boolean, error: boolean) {
 function ChessGame() {
   const API_URL = import.meta.env.VITE_API_URL;
   const gameRef = useRef(new Chess());
+  // game.load() on each engine reply wipes chess.js history, so track this ourselves.
+  const startedRef = useRef(false);
   const game = gameRef.current;
   const [fen, setFen] = useState(game.fen());
   const [loading, setLoading] = useState(false);
@@ -55,7 +57,10 @@ function ChessGame() {
         promotion: "q",
       });
       setFen(game.fen());
-      if (game.history().length === 1) track("chess-game-started");
+      if (!startedRef.current) {
+        startedRef.current = true;
+        track("chess-game-started");
+      }
       track("chess-move-played");
       if (!game.isGameOver()) engineMove();
       return true;
@@ -66,6 +71,7 @@ function ChessGame() {
 
   function newGame() {
     game.reset();
+    startedRef.current = false;
     setFen(game.fen());
     setError(false);
   }
